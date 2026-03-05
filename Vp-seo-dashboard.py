@@ -196,8 +196,8 @@ fig_bar.update_layout(
     legend=dict(orientation="h", yanchor="bottom", y=1.02),
     margin=dict(l=20, r=120, t=60, b=20)
 )
-fig_bar.update_xaxes(title_text="TTV (€)", secondary_y=False)
-fig_bar.update_xaxes(title_text="Bookings", secondary_y=True)
+fig_bar.update_yaxes(title_text="TTV (€)", secondary_y=False)
+fig_bar.update_yaxes(title_text="Bookings", secondary_y=True)
 
 st.plotly_chart(fig_bar, use_container_width=True)
 
