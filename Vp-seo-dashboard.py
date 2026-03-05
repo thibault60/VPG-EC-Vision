@@ -6,6 +6,19 @@ from plotly.subplots import make_subplots
 
 st.set_page_config(page_title="VP SEO Dashboard", page_icon="✈️", layout="wide")
 
+# ── Logo Primelis ──
+_LOGO_B64 = "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"
+st.markdown(
+    f'''<style>
+    [data-testid="stAppViewContainer"] > .main {padding-top: 60px}
+    </style>
+    <div style="position:fixed;top:12px;right:20px;z-index:9999">
+      <img src="data:image/jpeg;base64,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" style="height:44px;border-radius:6px;opacity:0.92">
+    </div>''',
+    unsafe_allow_html=True
+)
+
+
 MONTH_LABELS = {
     1: "Janvier", 2: "Février", 3: "Mars", 4: "Avril",
     5: "Mai", 6: "Juin", 7: "Juillet", 8: "Août",
@@ -157,49 +170,55 @@ df_merged_global = df_merged_global.sort_values("TTV", ascending=True)  # pour b
 
 st.subheader(f"📊 Top {top_n} URLs · TTV & Bookings (période sélectionnée)")
 
-# ── Bar chart double axe ──
-fig_bar = make_subplots(specs=[[{"secondary_y": True}]])
+# Palette commune
+palette = px.colors.qualitative.Plotly + px.colors.qualitative.Dark24 + px.colors.qualitative.Light24
+df_donut = df_merged_global.sort_values("TTV", ascending=False).reset_index(drop=True)
+df_donut["color"] = [palette[i % len(palette)] for i in range(len(df_donut))]
 
-fig_bar.add_trace(
-    go.Bar(
-        y=df_merged_global["url_label"],
-        x=df_merged_global["TTV"],
-        name="TTV (€)",
-        orientation="h",
-        marker_color="#1d6fa4",
-        opacity=0.85,
-        text=df_merged_global["TTV"].map(lambda x: f"{x:,.0f} €"),
-        textposition="outside",
-    ),
-    secondary_y=False
-)
+col_donut, col_bkg_table = st.columns([1, 1])
 
-fig_bar.add_trace(
-    go.Bar(
-        y=df_merged_global["url_label"],
-        x=df_merged_global["Bookings"],
-        name="Bookings",
-        orientation="h",
-        marker_color="#f4a840",
-        opacity=0.85,
-        text=df_merged_global["Bookings"].map(lambda x: f"{int(x):,}"),
-        textposition="outside",
-    ),
-    secondary_y=True
-)
+with col_donut:
+    fig_donut = go.Figure(go.Pie(
+        labels=df_donut["url_label"],
+        values=df_donut["TTV"],
+        hole=0.45,
+        marker=dict(colors=df_donut["color"]),
+        textinfo="percent",
+        hovertemplate="<b>%{label}</b><br>TTV : %{value:,.0f} €<br>Part : %{percent}<extra></extra>",
+        sort=False
+    ))
+    fig_donut.update_layout(
+        title=f"TTV · Top {top_n} URLs",
+        height=600,
+        showlegend=False,
+        margin=dict(l=10, r=10, t=50, b=10)
+    )
+    st.plotly_chart(fig_donut, use_container_width=True)
 
-fig_bar.update_layout(
-    barmode="group",
-    height=max(450, top_n * 45),
-    title=f"Top {top_n} URLs · TTV (bleu, axe bas) vs Bookings (orange, axe haut)",
-    yaxis=dict(tickfont=dict(size=10)),
-    legend=dict(orientation="h", yanchor="bottom", y=1.02),
-    margin=dict(l=20, r=120, t=60, b=20)
-)
-fig_bar.update_yaxes(title_text="TTV (€)", secondary_y=False)
-fig_bar.update_yaxes(title_text="Bookings", secondary_y=True)
+with col_bkg_table:
+    st.markdown(f"**Bookings · Top {top_n} URLs**")
+    df_bkg_display = df_donut[["url_label", "Bookings", "TTV", "color"]].copy()
+    df_bkg_display = df_bkg_display.sort_values("Bookings", ascending=False).reset_index(drop=True)
 
-st.plotly_chart(fig_bar, use_container_width=True)
+    rows_html = ""
+    for _, row in df_bkg_display.iterrows():
+        dot = f'<span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:{row["color"]};margin-right:6px;vertical-align:middle"></span>'
+        rows_html += f"<tr><td>{dot}{row['url_label']}</td><td style='text-align:right'><b>{int(row['Bookings']):,}</b></td><td style='text-align:right;color:#888'>{row['TTV']:,.0f} €</td></tr>"
+
+    table_html = f"""
+    <style>
+    .bkg-table {{width:100%;border-collapse:collapse;font-size:12.5px}}
+    .bkg-table th {{text-align:left;padding:6px 8px;border-bottom:2px solid #ddd;color:#555;font-size:12px}}
+    .bkg-table td {{padding:4px 8px;border-bottom:1px solid #f0f0f0}}
+    .bkg-table tr:hover td {{background:#f7f7f7}}
+    </style>
+    <div style="max-height:560px;overflow-y:auto">
+    <table class="bkg-table">
+      <thead><tr><th>URL</th><th style="text-align:right">Bookings</th><th style="text-align:right">TTV (€)</th></tr></thead>
+      <tbody>{rows_html}</tbody>
+    </table></div>
+    """
+    st.markdown(table_html, unsafe_allow_html=True)
 
 # ── Line chart évolution mensuelle double axe ──
 st.subheader(f"📈 Évolution mensuelle · Top {top_n} URLs · TTV & Bookings")
@@ -237,7 +256,7 @@ for i, cid in enumerate(top_ids):
     )
 
 fig_line.update_layout(
-    height=560,
+    height=820,
     xaxis=dict(
         categoryorder="array",
         categoryarray=ordered_month_labels,
@@ -250,37 +269,6 @@ fig_line.update_yaxes(title_text="TTV (€)", secondary_y=False)
 fig_line.update_yaxes(title_text="Bookings", secondary_y=True)
 st.plotly_chart(fig_line, use_container_width=True)
 
-# ── Heatmaps côte à côte ──
-st.subheader("🗓️ Heatmaps · Mois × Destinations")
-col_h1, col_h2 = st.columns(2)
-
-for col, df_h, metric_name in [
-    (col_h1, df_ttv_agg, "TTV"),
-    (col_h2, df_bkg_agg, "Bookings")
-]:
-    with col:
-        df_heat = df_h[df_h["campaign_id"].isin(top_ids)].copy()
-        df_heat["slug"] = df_heat["slug"].fillna("ID:" + df_heat["campaign_id"].astype(str))
-        pivot = df_heat.pivot_table(
-            index="month_label", columns="slug",
-            values="value", aggfunc="sum", fill_value=0
-        )
-        ordered_rows = [MONTH_LABELS[m] for m in sorted(selected_months) if MONTH_LABELS[m] in pivot.index]
-        pivot = pivot.loc[ordered_rows]
-        pivot = pivot[pivot.sum(axis=0).sort_values(ascending=False).index]
-        fig_h = px.imshow(
-            pivot, text_auto=".0f",
-            color_continuous_scale="Blues" if metric_name == "TTV" else "Oranges",
-            title=f"Heatmap {metric_name}",
-            labels=dict(x="Destination", y="Mois", color=metric_name),
-            aspect="auto"
-        )
-        fig_h.update_layout(
-            height=max(300, len(pivot) * 50),
-            xaxis_tickangle=-45,
-            xaxis_tickfont=dict(size=9)
-        )
-        st.plotly_chart(fig_h, use_container_width=True)
 
 # ── Vue par mois ──
 st.divider()
