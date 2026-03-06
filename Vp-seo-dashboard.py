@@ -284,8 +284,8 @@ with st.sidebar:
     st.header("📂 Fichiers de données")
 
     # Fichiers par défaut dans le repo
-    DEFAULT_TABLEAU   = os.path.join(os.path.dirname(__file__), "data", "Act_data_data.csv")
-    DEFAULT_CARAMBOLA = os.path.join(os.path.dirname(__file__), "data", "campaign-export-fr.xlsx")
+    DEFAULT_TABLEAU   = os.path.join(os.path.dirname(__file__), "data", "Act data_data.csv")
+    DEFAULT_CARAMBOLA = os.path.join(os.path.dirname(__file__), "data", "campaign-export-fr-period-between_01_01_2025_12_31_2025.xlsx")
 
     _has_default_t = os.path.exists(DEFAULT_TABLEAU)
     _has_default_c = os.path.exists(DEFAULT_CARAMBOLA)
