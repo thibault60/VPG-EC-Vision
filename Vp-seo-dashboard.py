@@ -751,27 +751,28 @@ with tab4:
 st.divider()
 st.subheader("📊 Tableau récap · TTV + Bookings (toute la période sélectionnée)")
 
+# Merge catégories dans le récap AVANT le head(top_n)
 df_recap = df_merged_global.sort_values("TTV", ascending=False).copy()
 df_recap["TTV / Booking (€)"] = (df_recap["TTV"] / df_recap["Bookings"].replace(0, float("nan"))).round(0)
 
+if "type_page" in df_filtered.columns:
+    df_cats = df_filtered[["vp_url", "type_page", "destination"]].drop_duplicates("vp_url")
+    df_recap = df_recap.merge(df_cats, on="vp_url", how="left")
+
+# Appliquer top_n après le merge
 df_recap_display = df_recap.head(top_n).copy()
 df_recap_display["TTV (€)"]           = df_recap_display["TTV"].map(lambda x: f"{x:,.0f}")
 df_recap_display["Bookings"]          = df_recap_display["Bookings"].map(lambda x: f"{int(x):,}")
 df_recap_display["TTV / Booking (€)"] = df_recap_display["TTV / Booking (€)"].map(
     lambda x: f"{x:,.0f}" if pd.notna(x) else "-"
 )
-# Merge catégories dans le récap
-if "type_page" in df_filtered.columns:
-    df_cats = df_filtered[["vp_url", "type_page", "destination"]].drop_duplicates("vp_url")
-    df_recap = df_recap.merge(df_cats, on="vp_url", how="left")
 
 df_recap_display = df_recap_display.rename(columns={
     "campaign_id": "ID", "campaign_name": "Nom campagne", "vp_url": "URL VP"
 })
 extra_cols = []
-if "type_page" in df_recap.columns:
-    df_recap_display["Type"] = df_recap["type_page"].values
-    df_recap_display["Destination"] = df_recap["destination"].values
+if "type_page" in df_recap_display.columns:
+    df_recap_display = df_recap_display.rename(columns={"type_page": "Type", "destination": "Destination"})
     extra_cols = ["Type", "Destination"]
 df_recap_display = df_recap_display[["ID", "Nom campagne", "URL VP"] + extra_cols + ["TTV (€)", "Bookings", "TTV / Booking (€)"]]
 
