@@ -208,33 +208,53 @@ with col_bkg_table:
     """
     st.markdown(table_html, unsafe_allow_html=True)
 
-# ── Bar columns évolution mensuelle ──
+# ── Bar columns évolution mensuelle — 2 barres par mois (TTV + Bookings) ──
 st.subheader(f"📈 Évolution mensuelle · Top {top_n} URLs · TTV & Bookings")
 
-for df_trend_src, metric_label in [
-    (df_ttv_agg, "TTV (€)"),
-    (df_bkg_agg, "Bookings"),
-]:
-    df_t = df_trend_src[df_trend_src["campaign_id"].isin(top_ids)].copy()
-    df_t["url_label"] = df_t["url_label"].fillna("ID:" + df_t["campaign_id"].astype(str))
-    df_t = df_t.sort_values("month")
-    fig_ev = px.bar(
-        df_t,
-        x="month_label",
-        y="value",
-        color="url_label",
-        barmode="group",
-        title=metric_label,
-        labels={"value": metric_label, "month_label": "Mois", "url_label": "URL"},
-        category_orders={"month_label": ordered_month_labels},
-        height=950,
-    )
-    fig_ev.update_layout(
-        legend=dict(orientation="h", yanchor="top", y=-0.12, font=dict(size=9)),
-        margin=dict(b=180),
-        xaxis_tickangle=-30,
-    )
-    st.plotly_chart(fig_ev, use_container_width=True)
+# Agréger toutes les URLs du top en un total par mois
+df_ttv_monthly = (
+    df_ttv_agg[df_ttv_agg["campaign_id"].isin(top_ids)]
+    .groupby(["month", "month_label"])["value"].sum()
+    .reset_index().rename(columns={"value": "TTV (€)"})
+)
+df_bkg_monthly = (
+    df_bkg_agg[df_bkg_agg["campaign_id"].isin(top_ids)]
+    .groupby(["month", "month_label"])["value"].sum()
+    .reset_index().rename(columns={"value": "Bookings"})
+)
+df_monthly = df_ttv_monthly.merge(df_bkg_monthly, on=["month", "month_label"], how="outer").sort_values("month")
+
+fig_ev = go.Figure()
+fig_ev.add_trace(go.Bar(
+    x=df_monthly["month_label"],
+    y=df_monthly["TTV (€)"],
+    name="TTV (€)",
+    marker_color="#1d6fa4",
+    yaxis="y1",
+))
+fig_ev.add_trace(go.Bar(
+    x=df_monthly["month_label"],
+    y=df_monthly["Bookings"],
+    name="Bookings",
+    marker_color="#f4a840",
+    yaxis="y2",
+))
+fig_ev.update_layout(
+    barmode="group",
+    height=550,
+    xaxis=dict(
+        categoryorder="array",
+        categoryarray=ordered_month_labels,
+        tickfont=dict(size=12),
+        tickangle=-30,
+    ),
+    yaxis=dict(title="TTV (€)", titlefont=dict(color="#1d6fa4"), tickfont=dict(color="#1d6fa4")),
+    yaxis2=dict(title="Bookings", titlefont=dict(color="#f4a840"), tickfont=dict(color="#f4a840"),
+                overlaying="y", side="right"),
+    legend=dict(orientation="h", yanchor="bottom", y=1.02, font=dict(size=11)),
+    margin=dict(t=40, b=60, l=60, r=60),
+)
+st.plotly_chart(fig_ev, use_container_width=True)
 
 
 # ── Vue par mois ──
