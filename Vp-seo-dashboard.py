@@ -412,8 +412,11 @@ df_bkg_global = (
 top_ids = df_ttv_global["campaign_id"].tolist()
 df_merged_global = df_ttv_global.merge(df_bkg_global, on=["campaign_id", "campaign_name", "vp_url", "url_label"], how="left")
 df_merged_global["Bookings"] = df_merged_global["Bookings"].fillna(0)
-# Exclure les lignes où TTV ET Bookings sont à 0
-df_merged_global = df_merged_global[(df_merged_global["TTV"] > 0) | (df_merged_global["Bookings"] > 0)]
+# Exclure les lignes où TTV ET Bookings sont à 0 — sauf les IDs du mapping manuel (ex: Home)
+_pinned_ids = list(MANUAL_URL_MAPPING.keys())
+_active = df_merged_global[(df_merged_global["TTV"] > 0) | (df_merged_global["Bookings"] > 0)]
+_pinned = df_merged_global[df_merged_global["campaign_id"].isin(_pinned_ids)]
+df_merged_global = pd.concat([_active, _pinned]).drop_duplicates(subset=["campaign_id"])
 df_merged_global = df_merged_global.sort_values("TTV", ascending=True)  # pour bar horizontal
 
 # ──────────────────────────────────────────
