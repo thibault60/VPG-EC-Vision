@@ -249,8 +249,8 @@ fig_ev.update_layout(
     legend=dict(orientation="h", yanchor="bottom", y=1.02, font=dict(size=11)),
     margin=dict(t=40, b=60, l=60, r=60),
 )
-fig_ev.update_yaxes(title_text="TTV (€)", titlefont=dict(color="#1d6fa4"), tickfont=dict(color="#1d6fa4"), secondary_y=False)
-fig_ev.update_yaxes(title_text="Bookings", titlefont=dict(color="#f4a840"), tickfont=dict(color="#f4a840"), secondary_y=True)
+fig_ev.update_yaxes(title_text="TTV (€)", title_font=dict(color="#1d6fa4"), tickfont=dict(color="#1d6fa4"), secondary_y=False)
+fig_ev.update_yaxes(title_text="Bookings", title_font=dict(color="#f4a840"), tickfont=dict(color="#f4a840"), secondary_y=True)
 st.plotly_chart(fig_ev, use_container_width=True)
 
 
