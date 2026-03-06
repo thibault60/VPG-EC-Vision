@@ -296,24 +296,14 @@ with st.sidebar:
     st.header("🔧 Filtres")
     months_available = sorted(df["month"].unique())
 
-    # Boutons de sélection rapide des mois
-    _col_q = st.columns(5)
-    if _col_q[0].button("Tout", use_container_width=True):
-        st.session_state["sel_months"] = months_available
-    quarters = {"T1":[1,2,3],"T2":[4,5,6],"T3":[7,8,9],"T4":[10,11,12]}
-    for i,(qname,qmonths) in enumerate(quarters.items()):
-        if _col_q[i+1].button(qname, use_container_width=True):
-            st.session_state["sel_months"] = [m for m in qmonths if m in months_available]
+    st.caption("Mois")
+    selected_months = []
+    for m in months_available:
+        if st.checkbox(MONTH_LABELS[m], value=True, key=f"month_cb_{m}"):
+            selected_months.append(m)
+    if not selected_months:
+        selected_months = months_available
 
-    if "sel_months" not in st.session_state:
-        st.session_state["sel_months"] = months_available
-
-    selected_months = st.multiselect(
-        "Mois", options=months_available,
-        default=[m for m in st.session_state["sel_months"] if m in months_available],
-        format_func=lambda x: MONTH_LABELS[x], key="months_ms"
-    )
-    st.session_state["sel_months"] = selected_months
     top_n = st.slider("Top N pages", min_value=5, max_value=150, value=10)
 
     st.divider()
