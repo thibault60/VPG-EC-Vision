@@ -812,14 +812,16 @@ with col_dl2:
     from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
     from openpyxl.utils import get_column_letter
 
-    def build_excel(df_recap_raw, df_ttv_agg, df_bkg_agg, df_tpl_agg, ordered_month_labels, MONTH_LABELS):
+    def build_excel(df_recap_raw, df_ttv_agg, df_bkg_agg, df_tpl_agg, ordered_month_labels, MONTH_LABELS, selected_months):
         wb = Workbook()
         _blue  = "1d6fa4"
         _green = "1a7a4a"
         _ora   = "f4a840"
 
         def style_header(ws, color):
-            for cell in ws[1]:
+            # Headers are on row 2 when a months label row is prepended on ws1, row 1 elsewhere
+            row_idx = 2 if ws.title == "URLs" else 1
+            for cell in ws[row_idx]:
                 cell.font = Font(bold=True, color="FFFFFF")
                 cell.fill = PatternFill("solid", fgColor=color)
                 cell.alignment = Alignment(horizontal="center")
@@ -837,6 +839,9 @@ with col_dl2:
         ws1.title = "URLs"
         has_cats = "type_page" in df_recap_raw.columns
         headers = ["ID", "Nom campagne", "URL VP"] + (["Schéma de recherche", "Destination"] if has_cats else []) + ["TTV (€)", "Bookings", "TTV / Booking (€)"]
+        _months_label = "Période : " + ", ".join([MONTH_LABELS[m] for m in sorted(selected_months)])
+        ws1.append([_months_label])
+        ws1[1][0].font = Font(italic=True, color="555555")
         ws1.append(headers)
         style_header(ws1, _blue)
         for _, row in df_recap_raw.iterrows():
@@ -915,10 +920,10 @@ with col_dl2:
         buf.seek(0)
         return buf.read()
 
-    xls_data = build_excel(df_recap, df_ttv_agg, df_bkg_agg, df_tpl_agg, ordered_month_labels, MONTH_LABELS)
+    xls_data = build_excel(df_recap, df_ttv_agg, df_bkg_agg, df_tpl_agg, ordered_month_labels, MONTH_LABELS, selected_months)
     st.download_button(
         label="⬇️ Exporter Excel (5 onglets)",
         data=xls_data,
-        file_name="vp_seo_recap.xlsx",
+        file_name=f"vp_seo_recap_{'_'.join([MONTH_LABELS[m][:3] for m in sorted(selected_months)])}.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
