@@ -241,7 +241,17 @@ def load_data(tableau_file, carambola_file):
         columns={"Campaign id": "campaign_id", "Campaign name": "campaign_name"}
     )
 
-    df_tab = pd.read_csv(tableau_file, sep=";")
+    # Détection automatique du séparateur
+    import io
+    _raw = tableau_file if isinstance(tableau_file, str) else tableau_file
+    df_tab_test = pd.read_csv(_raw, sep=None, engine="python", nrows=2)
+    _sep = ";" if "Campaign Id (h1)" in df_tab_test.columns or any(";" in str(c) for c in df_tab_test.columns) else ","
+    # Relire avec le bon séparateur
+    if not isinstance(tableau_file, str):
+        tableau_file.seek(0)
+    df_tab = pd.read_csv(tableau_file, sep=_sep, engine="python")
+    # Normalise les noms de colonnes (strip espaces)
+    df_tab.columns = df_tab.columns.str.strip()
     df_tab = df_tab.rename(columns={
         "Campaign Id (h1)": "campaign_id",
         "Measure Names": "metric",
