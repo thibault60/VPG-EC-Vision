@@ -218,6 +218,13 @@ with col_bkg_table:
 # ── Bar columns évolution mensuelle — 2 barres par mois (TTV + Bookings) ──
 st.subheader(f"📈 Évolution mensuelle · Top {top_n} URLs · TTV & Bookings")
 
+ev_mode = st.radio(
+    "Afficher :",
+    options=["TTV + Bookings", "TTV uniquement", "Bookings uniquement"],
+    horizontal=True,
+    label_visibility="collapsed"
+)
+
 # Agréger toutes les URLs du top en un total par mois
 df_ttv_monthly = (
     df_ttv_agg[df_ttv_agg["campaign_id"].isin(top_ids)]
@@ -245,38 +252,41 @@ color_map = {lbl: palette[i % len(palette)] for i, lbl in enumerate(url_labels_o
 fig_ev = make_subplots(specs=[[{"secondary_y": True}]])
 
 # ── Barres empilées TTV par URL (axe gauche) ──
-for cid in top_ids:
-    lbl = df_merged_global[df_merged_global["campaign_id"] == cid]["url_label"].values
-    lbl = lbl[0] if len(lbl) else "ID:" + str(cid)
-    color = color_map.get(lbl, "#888")
-    row_ttv = df_ttv_agg[df_ttv_agg["campaign_id"] == cid].sort_values("month")
-    fig_ev.add_trace(go.Bar(
-        x=row_ttv["month_label"],
-        y=row_ttv["value"],
-        name=lbl,
-        marker=dict(color=color),
-        legendgroup=lbl,
-        showlegend=True,
-        hovertemplate="<b>%{fullData.name}</b><br>TTV : %{y:,.0f} €<extra></extra>"
-    ), secondary_y=False)
+if ev_mode in ("TTV + Bookings", "TTV uniquement"):
+    for cid in top_ids:
+        lbl = df_merged_global[df_merged_global["campaign_id"] == cid]["url_label"].values
+        lbl = lbl[0] if len(lbl) else "ID:" + str(cid)
+        color = color_map.get(lbl, "#888")
+        row_ttv = df_ttv_agg[df_ttv_agg["campaign_id"] == cid].sort_values("month")
+        fig_ev.add_trace(go.Bar(
+            x=row_ttv["month_label"],
+            y=row_ttv["value"],
+            name=lbl,
+            marker=dict(color=color),
+            legendgroup=lbl,
+            showlegend=True,
+            hovertemplate="<b>%{fullData.name}</b><br>TTV : %{y:,.0f} €<extra></extra>"
+        ), secondary_y=False)
 
 # ── Ligne Bookings par URL (axe droit) ──
-for cid in top_ids:
-    lbl = df_merged_global[df_merged_global["campaign_id"] == cid]["url_label"].values
-    lbl = lbl[0] if len(lbl) else "ID:" + str(cid)
-    color = color_map.get(lbl, "#888")
-    row_bkg = df_bkg_agg[df_bkg_agg["campaign_id"] == cid].sort_values("month")
-    fig_ev.add_trace(go.Scatter(
-        x=row_bkg["month_label"],
-        y=row_bkg["value"],
-        name=lbl,
-        mode="lines+markers",
-        line=dict(color=color, width=1.8, dash="dot"),
-        marker=dict(color=color, size=5),
-        legendgroup=lbl,
-        showlegend=False,
-        hovertemplate="<b>%{fullData.name}</b><br>Bookings : %{y:,.0f}<extra></extra>"
-    ), secondary_y=True)
+if ev_mode in ("TTV + Bookings", "Bookings uniquement"):
+    for cid in top_ids:
+        lbl = df_merged_global[df_merged_global["campaign_id"] == cid]["url_label"].values
+        lbl = lbl[0] if len(lbl) else "ID:" + str(cid)
+        color = color_map.get(lbl, "#888")
+        row_bkg = df_bkg_agg[df_bkg_agg["campaign_id"] == cid].sort_values("month")
+        show_legend = ev_mode == "Bookings uniquement"
+        fig_ev.add_trace(go.Scatter(
+            x=row_bkg["month_label"],
+            y=row_bkg["value"],
+            name=lbl,
+            mode="lines+markers",
+            line=dict(color=color, width=1.8, dash="dot"),
+            marker=dict(color=color, size=5),
+            legendgroup=lbl,
+            showlegend=show_legend,
+            hovertemplate="<b>%{fullData.name}</b><br>Bookings : %{y:,.0f}<extra></extra>"
+        ), secondary_y=True)
 
 fig_ev.update_layout(
     barmode="stack",
