@@ -15,33 +15,55 @@ st.set_page_config(page_title="VP SEO Dashboard", page_icon="🗺️", layout="w
 # CATÉGORISATION GPT DES URLS
 # ──────────────────────────────────────────
 
-CATEGORY_RULES = {
-    "Last minute":     ["last-minute", "derniere-minute", "depart-demain", "dernieres-minutes", "croisieres-sur-le-nil-last-minute"],
-    "Vol + Hôtel":     ["vol-hotel", "vol-hotel-"],
-    "Circuit":         ["circuit-"],
-    "Week-end":        ["week-end-"],
-    "All inclusive":   ["all-inclusive", "tout-compris", "tout-inclus", "vacances-et-sejours-all-inclusive"],
-    "Séjour":          ["sejour-", "sejours-"],
-    "Voyage":          ["voyage-"],
-    "Hôtel":           ["hotel-", "hotels-", "hotel-en-", "hotel-a-"],
-    "Ventes privées":  ["vente-privee", "ventes-privees", "ventes-privees-de-vacances"],
-    "Guide / Top":     ["top-", "meilleurs-hotels", "quand-partir"],
-    "Vacances":        ["vacances-"],
-    "Combiné":         ["combine-"],
-    "Croisière":       ["croisiere", "croisières"],
-    "Autre":           ["login", "offres-black-friday", "promo-vacances", "voyage-pirates", "ou-partir"],
-}
+# Ordre important : du plus spécifique au plus général
+CATEGORY_RULES = [
+    # 1 — All inclusive / Tout compris
+    ("All inclusive",   ["all-inclusive", "tout-compris", "tout-inclus", "vacances-et-sejours-all-inclusive", "bali-tout-compris"]),
+    # 2 — Circuit / Autotour
+    ("Circuit",         ["circuit-", "autotour"]),
+    # 3 — Dernière minute
+    ("Dernière minute", ["last-minute", "derniere-minute", "dernieres-minutes", "depart-demain", "derniere-minute-"]),
+    # 4 — Hôtel
+    ("Hôtel",           ["hotel-", "hotels-"]),
+    # 5 — Meilleurs / Guide top
+    ("Meilleurs",       ["top-", "meilleurs-hotels", "meilleurs-hotels-clubs", "les-meilleurs"]),
+    # 7 — Où partir
+    ("Où partir",       ["ou-partir", "Ou-partir"]),
+    # 8 — Quand partir
+    ("Quand partir",    ["quand-partir"]),
+    # 9 — Séjour
+    ("Séjour",          ["sejour-", "sejours-", "offres-sejours"]),
+    # 10 — Ski
+    ("Ski",             ["ski-", "ski-a-", "ski-aux-", "ski-dans-", "ski-en-"]),
+    # 11 — Vacances
+    ("Vacances",        ["vacances-", "vacance-"]),
+    # 12 — Ventes privées / Promo
+    ("Ventes privées",  ["vente-privee", "ventes-privees", "promo-", "bon-plan", "offres-black-friday", "sejour-et-voyage-pas-cher"]),
+    # 13 — Vol + Hôtel
+    ("Vol + Hôtel",     ["vol-hotel"]),
+    # 14 — Voyage
+    ("Voyage",          ["voyage-"]),
+    # 15 — Week-end
+    ("Week-end",        ["week-end-", "week-ends-"]),
+    # 17 — Que faire
+    ("Que faire",       ["que-faire"]),
+    # Combiné / Croisière
+    ("Combiné",         ["combine-"]),
+    ("Croisière",       ["croisiere"]),
+    # Autre
+    ("Autre",           ["login", "voyage-pirates"]),
+]
 
 def categorize_url_rules(url):
-    """Catégorisation rapide par règles sans API."""
+    """Catégorisation par règles — ordre du plus spécifique au plus général."""
     if not url or not isinstance(url, str):
         return "Autre"
     slug = url.lower().split("/offres/")[-1] if "/offres/" in url else url.lower()
-    for cat, patterns in CATEGORY_RULES.items():
+    for cat, patterns in CATEGORY_RULES:
         for p in patterns:
-            if slug.startswith(p) or p in slug:
+            if slug.startswith(p.lower()) or p.lower() in slug:
                 return cat
-    return None
+    return "Voyage"  # fallback
 
 @st.cache_data(ttl=86400, show_spinner=False)
 def categorize_urls_gpt(urls_tuple, openai_key):
@@ -78,7 +100,7 @@ def categorize_urls_gpt(urls_tuple, openai_key):
     for i in range(0, len(to_gpt), batch_size):
         batch = to_gpt[i:i+batch_size]
         prompt = """Tu es un expert SEO voyage. Pour chaque URL ci-dessous, retourne un JSON avec:
-- "type": une des valeurs: Séjour, Voyage, Hôtel, Last minute, Vol + Hôtel, Circuit, Week-end, All inclusive, Ventes privées, Guide / Top, Vacances, Combiné, Croisière, Autre
+- "type": une des valeurs: All inclusive, Circuit, Dernière minute, Hôtel, Meilleurs, Où partir, Quand partir, Séjour, Ski, Vacances, Ventes privées, Vol + Hôtel, Voyage, Week-end, Que faire, Combiné, Croisière, Autre
 - "destination": le pays ou la région principale (ex: "France", "Maroc", "Maldives", "Europe"), ou null si générique
 
 URLs:
@@ -511,22 +533,59 @@ if ev_mode in ("TTV + Bookings", "Bookings uniquement"):
             hovertemplate="<b>%{fullData.name}</b><br>Bookings : %{y:,.0f}<extra></extra>"
         ), secondary_y=True)
 
-fig_ev.update_layout(
-    barmode="stack",
-    height=700,
-    xaxis=dict(
-        categoryorder="array",
-        categoryarray=ordered_month_labels,
-        tickangle=-30,
-        tickfont=dict(size=11),
-    ),
-    legend=dict(orientation="h", yanchor="top", y=-0.2, font=dict(size=9)),
-    margin=dict(t=40, b=180, l=60, r=60),
-)
-fig_ev.update_yaxes(title_text="TTV (€)", secondary_y=False)
-fig_ev.update_yaxes(title_text="Bookings", secondary_y=True, showgrid=False)
-st.plotly_chart(fig_ev, use_container_width=True)
+    fig_ev.update_layout(
+        barmode="stack",
+        height=700,
+        xaxis=dict(
+            categoryorder="array",
+            categoryarray=ordered_month_labels,
+            tickangle=-30,
+            tickfont=dict(size=11),
+        ),
+        legend=dict(orientation="h", yanchor="top", y=-0.2, font=dict(size=9)),
+        margin=dict(t=40, b=180, l=60, r=60),
+    )
+    fig_ev.update_yaxes(title_text="TTV (€)", secondary_y=False)
+    fig_ev.update_yaxes(title_text="Bookings", secondary_y=True, showgrid=False)
+    st.plotly_chart(fig_ev, use_container_width=True)
 
+    # ── Heatmaps par mois ──
+    st.subheader("🗓️ Heatmap mensuelle")
+    hm_col1, hm_col2 = st.columns(2)
+
+    for hm_col, hm_metric, hm_label, hm_color in [
+        (hm_col1, "TTV",      "TTV (€)",  "Blues"),
+        (hm_col2, "Bookings", "Bookings", "Oranges"),
+    ]:
+        with hm_col:
+            df_hm = (
+                df_filtered[df_filtered["metric"] == hm_metric]
+                .groupby(["url_label", "month"])["value"].sum()
+                .reset_index()
+            )
+            df_hm_piv = df_hm.pivot(index="url_label", columns="month", values="value").fillna(0)
+            # Trier par total décroissant, garder top_n
+            df_hm_piv["_total"] = df_hm_piv.sum(axis=1)
+            df_hm_piv = df_hm_piv.sort_values("_total", ascending=False).head(top_n).drop(columns="_total")
+            # Renommer les colonnes en noms de mois
+            df_hm_piv.columns = [MONTH_LABELS.get(c, str(c)) for c in df_hm_piv.columns]
+
+            fig_hm = px.imshow(
+                df_hm_piv,
+                labels=dict(x="Mois", y="URL", color=hm_label),
+                color_continuous_scale=hm_color,
+                aspect="auto",
+                title=f"Heatmap {hm_label} · Top {top_n} URLs",
+                text_auto=".3s",
+            )
+            fig_hm.update_layout(
+                height=max(400, top_n * 30),
+                margin=dict(l=10, r=10, t=50, b=10),
+                coloraxis_showscale=False,
+                xaxis=dict(side="top"),
+            )
+            fig_hm.update_traces(textfont_size=9)
+            st.plotly_chart(fig_hm, use_container_width=True)
 
 # ── Vue par mois ──
 with tab2:
