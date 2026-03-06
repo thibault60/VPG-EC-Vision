@@ -825,8 +825,12 @@ with col_dl2:
                 cell.alignment = Alignment(horizontal="center")
 
         def autowidth(ws, pad=4):
+            MAX_W = {"Nom campagne": 40, "URL VP": 50, "URL": 50}
             for col in ws.columns:
-                ws.column_dimensions[get_column_letter(col[0].column)].width = max(len(str(c.value or "")) for c in col) + pad
+                header = str(col[0].value or "")
+                max_w = MAX_W.get(header, 999)
+                w = min(max(len(str(c.value or "")) for c in col) + pad, max_w)
+                ws.column_dimensions[get_column_letter(col[0].column)].width = w
 
         # ── Onglet 1 : URLs ──
         ws1 = wb.active
