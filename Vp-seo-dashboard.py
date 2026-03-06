@@ -260,39 +260,37 @@ for cid in top_ids:
         hovertemplate="<b>%{fullData.name}</b><br>TTV : %{y:,.0f} €<extra></extra>"
     ), secondary_y=False)
 
-# ── Ligne Bookings total (axe droit) ──
-df_bkg_total = (
-    df_bkg_agg[df_bkg_agg["campaign_id"].isin(top_ids)]
-    .groupby(["month", "month_label"])["value"].sum()
-    .reset_index().sort_values("month")
-)
-fig_ev.add_trace(go.Scatter(
-    x=df_bkg_total["month_label"],
-    y=df_bkg_total["value"],
-    name="Bookings (total)",
-    mode="lines+markers",
-    line=dict(color="white", width=2.5, dash="solid"),
-    marker=dict(color="white", size=7, line=dict(color="#333", width=1.5)),
-    hovertemplate="Bookings total : <b>%{y:,.0f}</b><extra></extra>"
-), secondary_y=True)
+# ── Ligne Bookings par URL (axe droit) ──
+for cid in top_ids:
+    lbl = df_merged_global[df_merged_global["campaign_id"] == cid]["url_label"].values
+    lbl = lbl[0] if len(lbl) else "ID:" + str(cid)
+    color = color_map.get(lbl, "#888")
+    row_bkg = df_bkg_agg[df_bkg_agg["campaign_id"] == cid].sort_values("month")
+    fig_ev.add_trace(go.Scatter(
+        x=row_bkg["month_label"],
+        y=row_bkg["value"],
+        name=lbl,
+        mode="lines+markers",
+        line=dict(color=color, width=1.8, dash="dot"),
+        marker=dict(color=color, size=5),
+        legendgroup=lbl,
+        showlegend=False,
+        hovertemplate="<b>%{fullData.name}</b><br>Bookings : %{y:,.0f}<extra></extra>"
+    ), secondary_y=True)
 
 fig_ev.update_layout(
     barmode="stack",
-    height=650,
-    plot_bgcolor="#1e1e2e",
-    paper_bgcolor="#1e1e2e",
-    font=dict(color="white"),
+    height=700,
     xaxis=dict(
         categoryorder="array",
         categoryarray=ordered_month_labels,
         tickangle=-30,
         tickfont=dict(size=11),
-        gridcolor="#333",
     ),
     legend=dict(orientation="h", yanchor="top", y=-0.2, font=dict(size=9)),
     margin=dict(t=40, b=180, l=60, r=60),
 )
-fig_ev.update_yaxes(title_text="TTV (€)", secondary_y=False, gridcolor="#333")
+fig_ev.update_yaxes(title_text="TTV (€)", secondary_y=False)
 fig_ev.update_yaxes(title_text="Bookings", secondary_y=True, showgrid=False)
 st.plotly_chart(fig_ev, use_container_width=True)
 
@@ -369,8 +367,84 @@ df_recap_display = df_recap_display.rename(columns={
 st.caption(f"Top {top_n} pages triées par TTV décroissant")
 st.dataframe(df_recap_display, use_container_width=True, hide_index=True)
 
-csv = df_recap[["campaign_id", "campaign_name", "vp_url", "TTV", "Bookings", "TTV / Booking (€)"]].to_csv(index=False).encode("utf-8")
-st.download_button(
-    label="⬇️ Exporter le récap complet (CSV)",
-    data=csv, file_name="vp_seo_recap.csv", mime="text/csv"
-)
+col_dl1, col_dl2 = st.columns(2)
+
+with col_dl1:
+    csv = df_recap[["campaign_id", "campaign_name", "vp_url", "TTV", "Bookings", "TTV / Booking (€)"]].to_csv(index=False).encode("utf-8")
+    st.download_button(
+        label="⬇️ Exporter CSV",
+        data=csv, file_name="vp_seo_recap.csv", mime="text/csv"
+    )
+
+with col_dl2:
+    import io
+    from openpyxl import Workbook
+    from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+
+    def build_excel(df_recap_raw, df_ttv_agg, df_bkg_agg, ordered_month_labels, MONTH_LABELS):
+        wb = Workbook()
+
+        # ── Onglet 1 : Récap ──
+        ws1 = wb.active
+        ws1.title = "Récap TTV + Bookings"
+        headers = ["ID", "Nom campagne", "URL VP", "TTV (€)", "Bookings", "TTV / Booking (€)"]
+        ws1.append(headers)
+        for cell in ws1[1]:
+            cell.font = Font(bold=True, color="FFFFFF")
+            cell.fill = PatternFill("solid", fgColor="1d6fa4")
+            cell.alignment = Alignment(horizontal="center")
+        for _, row in df_recap_raw.iterrows():
+            tvb = row["TTV"] / row["Bookings"] if row["Bookings"] > 0 else None
+            ws1.append([
+                int(row["campaign_id"]), row["campaign_name"], row["vp_url"],
+                round(row["TTV"], 0), int(row["Bookings"]),
+                round(tvb, 0) if tvb else ""
+            ])
+        for col in ws1.columns:
+            ws1.column_dimensions[get_column_letter(col[0].column)].width = max(len(str(c.value or "")) for c in col) + 4
+
+        # ── Onglet 2 : TTV par mois ──
+        ws2 = wb.create_sheet("TTV par mois")
+        month_nums = sorted(set(df_ttv_agg["month"].tolist()))
+        month_cols = [MONTH_LABELS[m] for m in month_nums]
+        ws2.append(["URL"] + month_cols + ["TOTAL"])
+        for cell in ws2[1]:
+            cell.font = Font(bold=True, color="FFFFFF")
+            cell.fill = PatternFill("solid", fgColor="1d6fa4")
+        df_ttv_piv = df_ttv_agg.groupby(["vp_url", "month"])["value"].sum().reset_index()
+        df_ttv_piv = df_ttv_piv.pivot(index="vp_url", columns="month", values="value").fillna(0)
+        df_ttv_piv["TOTAL"] = df_ttv_piv.sum(axis=1)
+        df_ttv_piv = df_ttv_piv.sort_values("TOTAL", ascending=False)
+        for url, row2 in df_ttv_piv.iterrows():
+            ws2.append([url] + [round(row2.get(m, 0), 0) for m in month_nums] + [round(row2["TOTAL"], 0)])
+        for col in ws2.columns:
+            ws2.column_dimensions[get_column_letter(col[0].column)].width = max(len(str(c.value or "")) for c in col) + 3
+
+        # ── Onglet 3 : Bookings par mois ──
+        ws3 = wb.create_sheet("Bookings par mois")
+        ws3.append(["URL"] + month_cols + ["TOTAL"])
+        for cell in ws3[1]:
+            cell.font = Font(bold=True, color="FFFFFF")
+            cell.fill = PatternFill("solid", fgColor="f4a840")
+        df_bkg_piv = df_bkg_agg.groupby(["vp_url", "month"])["value"].sum().reset_index()
+        df_bkg_piv = df_bkg_piv.pivot(index="vp_url", columns="month", values="value").fillna(0)
+        df_bkg_piv["TOTAL"] = df_bkg_piv.sum(axis=1)
+        df_bkg_piv = df_bkg_piv.sort_values("TOTAL", ascending=False)
+        for url, row3 in df_bkg_piv.iterrows():
+            ws3.append([url] + [int(row3.get(m, 0)) for m in month_nums] + [int(row3["TOTAL"])])
+        for col in ws3.columns:
+            ws3.column_dimensions[get_column_letter(col[0].column)].width = max(len(str(c.value or "")) for c in col) + 3
+
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        return buf.read()
+
+    xls_data = build_excel(df_recap, df_ttv_agg, df_bkg_agg, ordered_month_labels, MONTH_LABELS)
+    st.download_button(
+        label="⬇️ Exporter Excel (3 onglets)",
+        data=xls_data,
+        file_name="vp_seo_recap.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
