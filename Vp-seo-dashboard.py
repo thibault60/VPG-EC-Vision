@@ -259,7 +259,7 @@ def load_data(tableau_file, carambola_file):
         "Date granularity": "month",
         "Registration Year":"year"
     })
-    df_tab = df_tab[df_tab["metric"].isin(["TTV", "Bookings"])].copy()
+    df_tab = df_tab[df_tab["metric"].isin(["TTV", "Bookings", "TTV per lead Net"])].copy()
     df_tab = df_tab[df_tab["campaign_id"].notna()].copy()
     df_tab["campaign_id"] = df_tab["campaign_id"].astype(int)
     df_tab["value"] = df_tab["value"].apply(parse_float)
@@ -407,6 +407,7 @@ def get_agg(df_in):
 
 df_ttv_agg  = get_agg(df_filtered[df_filtered["metric"] == "TTV"])
 df_bkg_agg  = get_agg(df_filtered[df_filtered["metric"] == "Bookings"])
+df_tpl_agg  = get_agg(df_filtered[df_filtered["metric"] == "TTV per lead Net"])
 
 # IDs à épingler (toujours présents, même TTV=0)
 _pinned_ids = list(MANUAL_URL_MAPPING.keys())
@@ -689,7 +690,8 @@ with tab3:
   else:
     _ttv_dest = _dest_cats[_dest_cats["metric"]=="TTV"].groupby("destination")["value"].sum().reset_index().sort_values("value", ascending=False)
     _bkg_dest = _dest_cats[_dest_cats["metric"]=="Bookings"].groupby("destination")["value"].sum().reset_index().sort_values("value", ascending=False)
-    _col1, _col2 = st.columns(2)
+    _tpl_dest = _dest_cats[_dest_cats["metric"]=="TTV per lead Net"].groupby("destination")["value"].mean().reset_index().sort_values("value", ascending=False)
+    _col1, _col2, _col3 = st.columns(3)
     with _col1:
       fig_dest_ttv = px.bar(_ttv_dest, x="value", y="destination", orientation="h",
         title="TTV (€) par destination", labels={"value":"TTV (€)","destination":"Destination"},
@@ -702,6 +704,12 @@ with tab3:
         color="value", color_continuous_scale="Oranges", height=max(400, len(_bkg_dest)*28))
       fig_dest_bkg.update_layout(yaxis=dict(autorange="reversed"), coloraxis_showscale=False)
       st.plotly_chart(fig_dest_bkg, use_container_width=True)
+    with _col3:
+      fig_dest_tpl = px.bar(_tpl_dest, x="value", y="destination", orientation="h",
+        title="TTV / Lead (€) par destination", labels={"value":"TTV/Lead (€)","destination":"Destination"},
+        color="value", color_continuous_scale="Greens", height=max(400, len(_tpl_dest)*28))
+      fig_dest_tpl.update_layout(yaxis=dict(autorange="reversed"), coloraxis_showscale=False)
+      st.plotly_chart(fig_dest_tpl, use_container_width=True)
     # Évolution mensuelle par destination
     st.subheader("📈 Évolution mensuelle par destination")
     ev_dest_mode = st.radio("Métrique", ["TTV (€)", "Bookings"], horizontal=True, key="ev_dest_mode")
@@ -723,7 +731,8 @@ with tab4:
         _type_cats = _type_cats[_type_cats["type_page"] != "Autre"]
     _ttv_type = _type_cats[_type_cats["metric"]=="TTV"].groupby("type_page")["value"].sum().reset_index().sort_values("value", ascending=False)
     _bkg_type = _type_cats[_type_cats["metric"]=="Bookings"].groupby("type_page")["value"].sum().reset_index().sort_values("value", ascending=False)
-    _col1t, _col2t = st.columns(2)
+    _tpl_type = _type_cats[_type_cats["metric"]=="TTV per lead Net"].groupby("type_page")["value"].mean().reset_index().sort_values("value", ascending=False)
+    _col1t, _col2t, _col3t = st.columns(3)
     with _col1t:
       fig_type_ttv = px.bar(_ttv_type, x="value", y="type_page", orientation="h",
         title="TTV (€) par type de page", labels={"value":"TTV (€)","type_page":"Type"},
@@ -736,6 +745,12 @@ with tab4:
         color="value", color_continuous_scale="Oranges", height=max(400, len(_bkg_type)*40))
       fig_type_bkg.update_layout(yaxis=dict(autorange="reversed"), coloraxis_showscale=False)
       st.plotly_chart(fig_type_bkg, use_container_width=True)
+    with _col3t:
+      fig_type_tpl = px.bar(_tpl_type, x="value", y="type_page", orientation="h",
+        title="TTV / Lead (€) par type de page", labels={"value":"TTV/Lead (€)","type_page":"Type"},
+        color="value", color_continuous_scale="Greens", height=max(400, len(_tpl_type)*40))
+      fig_type_tpl.update_layout(yaxis=dict(autorange="reversed"), coloraxis_showscale=False)
+      st.plotly_chart(fig_type_tpl, use_container_width=True)
     # Évolution mensuelle par type
     st.subheader("📈 Évolution mensuelle par type de page")
     ev_type_mode = st.radio("Métrique", ["TTV (€)", "Bookings"], horizontal=True, key="ev_type_mode")
@@ -797,67 +812,108 @@ with col_dl2:
     from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
     from openpyxl.utils import get_column_letter
 
-    def build_excel(df_recap_raw, df_ttv_agg, df_bkg_agg, ordered_month_labels, MONTH_LABELS):
+    def build_excel(df_recap_raw, df_ttv_agg, df_bkg_agg, df_tpl_agg, ordered_month_labels, MONTH_LABELS):
         wb = Workbook()
+        _blue  = "1d6fa4"
+        _green = "1a7a4a"
+        _ora   = "f4a840"
 
-        # ── Onglet 1 : Récap ──
+        def style_header(ws, color):
+            for cell in ws[1]:
+                cell.font = Font(bold=True, color="FFFFFF")
+                cell.fill = PatternFill("solid", fgColor=color)
+                cell.alignment = Alignment(horizontal="center")
+
+        def autowidth(ws, pad=4):
+            for col in ws.columns:
+                ws.column_dimensions[get_column_letter(col[0].column)].width = max(len(str(c.value or "")) for c in col) + pad
+
+        # ── Onglet 1 : URLs ──
         ws1 = wb.active
-        ws1.title = "Récap TTV + Bookings"
+        ws1.title = "URLs"
         has_cats = "type_page" in df_recap_raw.columns
         headers = ["ID", "Nom campagne", "URL VP"] + (["Schéma de recherche", "Destination"] if has_cats else []) + ["TTV (€)", "Bookings", "TTV / Booking (€)"]
         ws1.append(headers)
-        for cell in ws1[1]:
-            cell.font = Font(bold=True, color="FFFFFF")
-            cell.fill = PatternFill("solid", fgColor="1d6fa4")
-            cell.alignment = Alignment(horizontal="center")
+        style_header(ws1, _blue)
         for _, row in df_recap_raw.iterrows():
             tvb = row["TTV"] / row["Bookings"] if row["Bookings"] > 0 else None
             base = [int(row["campaign_id"]), row["campaign_name"], row["vp_url"]]
             cats = [row.get("type_page", ""), row.get("destination", "")] if has_cats else []
             ws1.append(base + cats + [round(row["TTV"], 0), int(row["Bookings"]), round(tvb, 0) if tvb else ""])
-        for col in ws1.columns:
-            ws1.column_dimensions[get_column_letter(col[0].column)].width = max(len(str(c.value or "")) for c in col) + 4
+        autowidth(ws1)
 
-        # ── Onglet 2 : TTV par mois ──
+        # ── Onglet 2 : Récap Schéma ──
+        if has_cats and "type_page" in df_recap_raw.columns:
+            ws_schema = wb.create_sheet("Récap Schéma")
+            ws_schema.append(["Schéma de recherche", "TTV (€)", "Bookings", "TTV / Booking (€)", "TTV / Lead (€)"])
+            style_header(ws_schema, _blue)
+            _schema_ttv = df_recap_raw.groupby("type_page")["TTV"].sum()
+            _schema_bkg = df_recap_raw.groupby("type_page")["Bookings"].sum()
+            # TTV/lead from tpl_agg
+            _tpl_by_schema = {}
+            if not df_tpl_agg.empty and "type_page" in df_filtered.columns:
+                _tpl_merged = df_tpl_agg.merge(df_filtered[["campaign_id","type_page"]].drop_duplicates(), on="campaign_id", how="left")
+                _tpl_by_schema = _tpl_merged.groupby("type_page")["value"].mean().to_dict()
+            for schema in _schema_ttv.index:
+                ttv = round(_schema_ttv[schema], 0)
+                bkg = int(_schema_bkg.get(schema, 0))
+                tvb = round(ttv / bkg, 0) if bkg > 0 else ""
+                tpl = round(_tpl_by_schema.get(schema, 0), 2) if schema in _tpl_by_schema else ""
+                ws_schema.append([schema, ttv, bkg, tvb, tpl])
+            autowidth(ws_schema)
+
+            # ── Onglet 3 : Récap Destination ──
+            ws_dest = wb.create_sheet("Récap Destination")
+            ws_dest.append(["Destination", "TTV (€)", "Bookings", "TTV / Booking (€)", "TTV / Lead (€)"])
+            style_header(ws_dest, _green)
+            _dest_ttv = df_recap_raw.groupby("destination")["TTV"].sum()
+            _dest_bkg = df_recap_raw.groupby("destination")["Bookings"].sum()
+            _tpl_by_dest = {}
+            if not df_tpl_agg.empty and "destination" in df_filtered.columns:
+                _tpl_dest_m = df_tpl_agg.merge(df_filtered[["campaign_id","destination"]].drop_duplicates(), on="campaign_id", how="left")
+                _tpl_by_dest = _tpl_dest_m.groupby("destination")["value"].mean().to_dict()
+            for dest in _dest_ttv.index:
+                ttv = round(_dest_ttv[dest], 0)
+                bkg = int(_dest_bkg.get(dest, 0))
+                tvb = round(ttv / bkg, 0) if bkg > 0 else ""
+                tpl = round(_tpl_by_dest.get(dest, 0), 2) if dest in _tpl_by_dest else ""
+                ws_dest.append([dest, ttv, bkg, tvb, tpl])
+            autowidth(ws_dest)
+
+        # ── Onglet 4 : TTV par mois ──
         ws2 = wb.create_sheet("TTV par mois")
         month_nums = sorted(set(df_ttv_agg["month"].tolist()))
         month_cols = [MONTH_LABELS[m] for m in month_nums]
         ws2.append(["URL"] + month_cols + ["TOTAL"])
-        for cell in ws2[1]:
-            cell.font = Font(bold=True, color="FFFFFF")
-            cell.fill = PatternFill("solid", fgColor="1d6fa4")
+        style_header(ws2, _blue)
         df_ttv_piv = df_ttv_agg.groupby(["vp_url", "month"])["value"].sum().reset_index()
         df_ttv_piv = df_ttv_piv.pivot(index="vp_url", columns="month", values="value").fillna(0)
         df_ttv_piv["TOTAL"] = df_ttv_piv.sum(axis=1)
         df_ttv_piv = df_ttv_piv.sort_values("TOTAL", ascending=False)
         for url, row2 in df_ttv_piv.iterrows():
             ws2.append([url] + [round(row2.get(m, 0), 0) for m in month_nums] + [round(row2["TOTAL"], 0)])
-        for col in ws2.columns:
-            ws2.column_dimensions[get_column_letter(col[0].column)].width = max(len(str(c.value or "")) for c in col) + 3
+        autowidth(ws2)
 
-        # ── Onglet 3 : Bookings par mois ──
+        # ── Onglet 5 : Bookings par mois ──
         ws3 = wb.create_sheet("Bookings par mois")
         ws3.append(["URL"] + month_cols + ["TOTAL"])
-        for cell in ws3[1]:
-            cell.font = Font(bold=True, color="FFFFFF")
-            cell.fill = PatternFill("solid", fgColor="f4a840")
+        style_header(ws3, _ora)
         df_bkg_piv = df_bkg_agg.groupby(["vp_url", "month"])["value"].sum().reset_index()
         df_bkg_piv = df_bkg_piv.pivot(index="vp_url", columns="month", values="value").fillna(0)
         df_bkg_piv["TOTAL"] = df_bkg_piv.sum(axis=1)
         df_bkg_piv = df_bkg_piv.sort_values("TOTAL", ascending=False)
         for url, row3 in df_bkg_piv.iterrows():
             ws3.append([url] + [int(row3.get(m, 0)) for m in month_nums] + [int(row3["TOTAL"])])
-        for col in ws3.columns:
-            ws3.column_dimensions[get_column_letter(col[0].column)].width = max(len(str(c.value or "")) for c in col) + 3
+        autowidth(ws3)
 
         buf = io.BytesIO()
         wb.save(buf)
         buf.seek(0)
         return buf.read()
 
-    xls_data = build_excel(df_recap, df_ttv_agg, df_bkg_agg, ordered_month_labels, MONTH_LABELS)
+    xls_data = build_excel(df_recap, df_ttv_agg, df_bkg_agg, df_tpl_agg, ordered_month_labels, MONTH_LABELS)
     st.download_button(
-        label="⬇️ Exporter Excel (3 onglets)",
+        label="⬇️ Exporter Excel (5 onglets)",
         data=xls_data,
         file_name="vp_seo_recap.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
