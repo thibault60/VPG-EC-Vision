@@ -3,11 +3,163 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import json
+import requests
 
 st.set_page_config(page_title="VP SEO Dashboard", page_icon="🗺️", layout="wide")
 
 
 
+
+# ──────────────────────────────────────────
+# CATÉGORISATION GPT DES URLS
+# ──────────────────────────────────────────
+
+CATEGORY_RULES = {
+    "Last minute":     ["last-minute", "derniere-minute", "depart-demain", "dernieres-minutes", "croisieres-sur-le-nil-last-minute"],
+    "Vol + Hôtel":     ["vol-hotel", "vol-hotel-"],
+    "Circuit":         ["circuit-"],
+    "Week-end":        ["week-end-"],
+    "All inclusive":   ["all-inclusive", "tout-compris", "tout-inclus", "vacances-et-sejours-all-inclusive"],
+    "Séjour":          ["sejour-", "sejours-"],
+    "Voyage":          ["voyage-"],
+    "Hôtel":           ["hotel-", "hotels-", "hotel-en-", "hotel-a-"],
+    "Ventes privées":  ["vente-privee", "ventes-privees", "ventes-privees-de-vacances"],
+    "Guide / Top":     ["top-", "meilleurs-hotels", "quand-partir"],
+    "Vacances":        ["vacances-"],
+    "Combiné":         ["combine-"],
+    "Croisière":       ["croisiere", "croisières"],
+    "Autre":           ["login", "offres-black-friday", "promo-vacances", "voyage-pirates", "ou-partir"],
+}
+
+def categorize_url_rules(url):
+    """Catégorisation rapide par règles sans API."""
+    slug = url.lower().split("/offres/")[-1] if "/offres/" in url else url.lower()
+    for cat, patterns in CATEGORY_RULES.items():
+        for p in patterns:
+            if slug.startswith(p) or p in slug:
+                return cat
+    return None
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def categorize_urls_gpt(urls_tuple, openai_key):
+    """Envoie les URLs non catégorisées à GPT en batch et retourne {url: {type, destination}}."""
+    urls = list(urls_tuple)
+    
+    # Catégorisation par règles d'abord
+    result = {}
+    to_gpt = []
+    for url in urls:
+        cat = categorize_url_rules(url)
+        slug = url.lower().split("/offres/")[-1] if "/offres/" in url else ""
+        if cat:
+            result[url] = {"type": cat, "destination": extract_destination_rules(slug)}
+        else:
+            to_gpt.append(url)
+
+    if not to_gpt or not openai_key:
+        # Fallback sans GPT
+        for url in to_gpt:
+            slug = url.lower().split("/offres/")[-1] if "/offres/" in url else ""
+            result[url] = {"type": "Voyage", "destination": extract_destination_rules(slug)}
+        return result
+
+    # Batch GPT pour les URLs ambiguës
+    batch_size = 30
+    for i in range(0, len(to_gpt), batch_size):
+        batch = to_gpt[i:i+batch_size]
+        prompt = """Tu es un expert SEO voyage. Pour chaque URL ci-dessous, retourne un JSON avec:
+- "type": une des valeurs: Séjour, Voyage, Hôtel, Last minute, Vol + Hôtel, Circuit, Week-end, All inclusive, Ventes privées, Guide / Top, Vacances, Combiné, Croisière, Autre
+- "destination": le pays ou la région principale (ex: "France", "Maroc", "Maldives", "Europe"), ou null si générique
+
+URLs:
+""" + "\n".join(batch) + """
+
+Réponds UNIQUEMENT avec un JSON valide de la forme:
+{"url1": {"type": "...", "destination": "..."}, "url2": {...}}"""
+
+        try:
+            resp = requests.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={"Authorization": f"Bearer {openai_key}", "Content-Type": "application/json"},
+                json={
+                    "model": "gpt-4o-mini",
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0,
+                    "response_format": {"type": "json_object"},
+                },
+                timeout=30
+            )
+            data = resp.json()
+            parsed = json.loads(data["choices"][0]["message"]["content"])
+            result.update(parsed)
+        except Exception:
+            for url in batch:
+                slug = url.lower().split("/offres/")[-1] if "/offres/" in url else ""
+                result[url] = {"type": "Voyage", "destination": extract_destination_rules(slug)}
+
+    return result
+
+def extract_destination_rules(slug):
+    """Extrait la destination depuis le slug par règles simples."""
+    slug = slug.lower()
+    destinations = {
+        "France": ["france", "corse", "paris", "bordeaux", "lyon", "guyane", "martinique", "guadeloupe", "antilles", "reunion"],
+        "Maroc": ["maroc", "marrakech", "agadir", "casablanca"],
+        "Espagne": ["espagne", "barcelone", "madrid", "seville", "majorque", "mallorca", "minorque", "ibiza", "canaries", "lanzarote", "fuerteventura", "tenerife", "andalousie"],
+        "Grèce": ["grece", "crete", "santorin", "mykonos", "rhodes", "corfou", "iles-grecques"],
+        "Italie": ["italie", "rome", "venise", "sardaigne", "sicile", "pouilles", "cinque-terre", "capri", "amalfi", "florence"],
+        "Egypte": ["egypte", "hurghada", "charm-el-cheikh", "louxor"],
+        "Maldives": ["maldives"],
+        "Thaïlande": ["thailande", "bangkok", "phuket", "koh-samui"],
+        "Dubai": ["dubai", "emirats-arabes"],
+        "Turquie": ["turquie", "istanbul", "cappadoce", "antalya", "bodrum"],
+        "Tunisie": ["tunisie", "djerba", "hammamet"],
+        "Portugal": ["portugal", "lisbonne", "porto", "madere", "acores"],
+        "Mexique": ["mexique", "cancun", "playa-del-carmen", "riviera-maya"],
+        "Bali": ["bali"],
+        "Japon": ["japon", "tokyo", "kyoto", "osaka"],
+        "Kenya": ["kenya"],
+        "Zanzibar": ["zanzibar"],
+        "Seychelles": ["seychelles"],
+        "Île Maurice": ["ile-maurice", "mauric"],
+        "Sri Lanka": ["sri-lanka"],
+        "Jordanie": ["jordanie", "petra"],
+        "Croatie": ["croatie", "dubrovnik"],
+        "Islande": ["islande", "reykjavik"],
+        "Laponie": ["laponie", "abisko"],
+        "Norvège": ["norvege"],
+        "Suisse": ["suisse", "geneve"],
+        "Belgique": ["belgique", "bruxelles"],
+        "Albanie": ["albanie"],
+        "Cuba": ["cuba", "la-havane"],
+        "Bahamas": ["bahamas"],
+        "Pérou": ["perou", "lima", "machu-picchu"],
+        "Malaisie": ["malaisie", "kuala-lumpur"],
+        "Namibie": ["namibie"],
+        "Tanzanie": ["tanzanie"],
+        "Afrique du Sud": ["afrique-du-sud", "cape-town"],
+        "Cap-Vert": ["cap-vert", "sal"],
+        "Hawaii": ["hawaii"],
+        "Punta Cana": ["punta-cana"],
+        "Budapest": ["budapest"],
+        "Prague": ["prague"],
+        "Amsterdam": ["amsterdam"],
+        "Londres": ["londres", "london"],
+        "New York": ["new-york"],
+        "Rome": ["rome"],
+        "Barcelone": ["barcelone"],
+        "Istanbul": ["istanbul"],
+        "Finlande": ["finlande"],
+        "Europe": ["europe"],
+        "Afrique": ["afrique"],
+        "USA": ["usa", "etats-unis", "amerique"],
+    }
+    for dest, keywords in destinations.items():
+        for kw in keywords:
+            if kw in slug:
+                return dest
+    return None
 
 MONTH_LABELS = {
     1: "Janvier", 2: "Février", 3: "Mars", 4: "Avril",
@@ -118,10 +270,45 @@ with st.sidebar:
     )
     top_n = st.slider("Top N pages", min_value=5, max_value=150, value=10)
 
+    st.divider()
+    st.header("🤖 Catégorisation GPT")
+    openai_key = st.text_input("Clé OpenAI (optionnel)", type="password",
+        help="Sans clé : catégorisation par règles uniquement")
+    enable_cat = st.checkbox("Activer la catégorisation", value=True)
+
+    st.divider()
+    st.header("🗂️ Filtres catégories")
+
 
 
 df_filtered = df[df["month"].isin(selected_months)].copy()
 ordered_month_labels = [MONTH_LABELS[m] for m in sorted(selected_months)]
+
+# ── Catégorisation des URLs ──
+if enable_cat:
+    all_urls = df_filtered["vp_url"].dropna().unique().tolist()
+    with st.spinner("Catégorisation des URLs..."):
+        cats = categorize_urls_gpt(tuple(all_urls), openai_key or "")
+    df_filtered["type_page"]   = df_filtered["vp_url"].map(lambda u: cats.get(u, {}).get("type", "Autre"))
+    df_filtered["destination"] = df_filtered["vp_url"].map(lambda u: cats.get(u, {}).get("destination"))
+else:
+    df_filtered["type_page"]   = df_filtered["vp_url"].apply(lambda u: categorize_url_rules(u) or "Voyage")
+    df_filtered["destination"] = df_filtered["vp_url"].apply(
+        lambda u: extract_destination_rules(u.lower().split("/offres/")[-1] if "/offres/" in u else "")
+    )
+
+# Mise à jour dynamique des filtres sidebar
+all_types = sorted(df_filtered["type_page"].dropna().unique().tolist())
+all_dests = sorted(df_filtered["destination"].dropna().unique().tolist())
+
+with st.sidebar:
+    filter_type = st.multiselect("Type de page", options=all_types, key="filter_type_dyn")
+    filter_dest = st.multiselect("Destination", options=all_dests, key="filter_dest_dyn")
+
+if filter_type:
+    df_filtered = df_filtered[df_filtered["type_page"].isin(filter_type)]
+if filter_dest:
+    df_filtered = df_filtered[df_filtered["destination"].isin(filter_dest)]
 
 # ── KPIs globaux ──
 col1, col2 = st.columns(2)
@@ -130,6 +317,13 @@ total_bkg = df_filtered[df_filtered["metric"] == "Bookings"]["value"].sum()
 col1.metric("💶 TTV Total (période)", f"{total_ttv:,.0f} €")
 col2.metric("🛎️ Bookings Total (période)", f"{int(total_bkg):,}")
 st.divider()
+
+tab1, tab2, tab3, tab4 = st.tabs([
+    "📊 Top URLs",
+    "📅 Vue par mois",
+    "🌍 Par destination",
+    "🗂️ Par type de page",
+])
 
 # ──────────────────────────────────────────
 # PRÉPARATION DES DONNÉES AGRÉGÉES
@@ -167,60 +361,61 @@ df_merged_global = df_merged_global.sort_values("TTV", ascending=True)  # pour b
 # GRAPHIQUES MERGED TTV + BOOKINGS
 # ──────────────────────────────────────────
 
-st.subheader(f"📊 Top {top_n} URLs · TTV & Bookings (période sélectionnée)")
+with tab1:
+    st.subheader(f"📊 Top {top_n} URLs · TTV & Bookings (période sélectionnée)")
 
-# Palette commune
-palette = px.colors.qualitative.Plotly + px.colors.qualitative.Dark24 + px.colors.qualitative.Light24
-df_donut = df_merged_global.sort_values("TTV", ascending=False).reset_index(drop=True)
-df_donut["color"] = [palette[i % len(palette)] for i in range(len(df_donut))]
+    # Palette commune
+    palette = px.colors.qualitative.Plotly + px.colors.qualitative.Dark24 + px.colors.qualitative.Light24
+    df_donut = df_merged_global.sort_values("TTV", ascending=False).reset_index(drop=True)
+    df_donut["color"] = [palette[i % len(palette)] for i in range(len(df_donut))]
 
-col_donut, col_bkg_table = st.columns([1, 1])
+    col_donut, col_bkg_table = st.columns([1, 1])
 
-with col_donut:
-    fig_donut = go.Figure(go.Pie(
-        labels=df_donut["url_label"],
-        values=df_donut["TTV"],
-        hole=0.45,
-        marker=dict(colors=df_donut["color"]),
-        textinfo="percent",
-        hovertemplate="<b>%{label}</b><br>TTV : %{value:,.0f} €<br>Part : %{percent}<extra></extra>",
-        sort=False
-    ))
-    fig_donut.update_layout(
-        title=f"TTV · Top {top_n} URLs",
-        height=600,
-        showlegend=False,
-        margin=dict(l=10, r=10, t=50, b=10)
-    )
-    st.plotly_chart(fig_donut, use_container_width=True)
+    with col_donut:
+        fig_donut = go.Figure(go.Pie(
+            labels=df_donut["url_label"],
+            values=df_donut["TTV"],
+            hole=0.45,
+            marker=dict(colors=df_donut["color"]),
+            textinfo="percent",
+            hovertemplate="<b>%{label}</b><br>TTV : %{value:,.0f} €<br>Part : %{percent}<extra></extra>",
+            sort=False
+        ))
+        fig_donut.update_layout(
+            title=f"TTV · Top {top_n} URLs",
+            height=600,
+            showlegend=False,
+            margin=dict(l=10, r=10, t=50, b=10)
+        )
+        st.plotly_chart(fig_donut, use_container_width=True)
 
-with col_bkg_table:
-    st.markdown(f"**Bookings · Top {top_n} URLs**")
-    df_bkg_display = df_donut[["url_label", "Bookings", "TTV", "color"]].copy()
-    df_bkg_display = df_bkg_display.sort_values("Bookings", ascending=False).reset_index(drop=True)
+    with col_bkg_table:
+        st.markdown(f"**Bookings · Top {top_n} URLs**")
+        df_bkg_display = df_donut[["url_label", "Bookings", "TTV", "color"]].copy()
+        df_bkg_display = df_bkg_display.sort_values("Bookings", ascending=False).reset_index(drop=True)
 
-    rows_html = ""
-    for _, row in df_bkg_display.iterrows():
-        dot = f'<span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:{row["color"]};margin-right:6px;vertical-align:middle"></span>'
-        rows_html += f"<tr><td>{dot}{row['url_label']}</td><td style='text-align:right'><b>{int(row['Bookings']):,}</b></td><td style='text-align:right;color:#888'>{row['TTV']:,.0f} €</td></tr>"
+        rows_html = ""
+        for _, row in df_bkg_display.iterrows():
+            dot = f'<span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:{row["color"]};margin-right:6px;vertical-align:middle"></span>'
+            rows_html += f"<tr><td>{dot}{row['url_label']}</td><td style='text-align:right'><b>{int(row['Bookings']):,}</b></td><td style='text-align:right;color:#888'>{row['TTV']:,.0f} €</td></tr>"
 
-    table_html = f"""
-    <style>
-    .bkg-table {{width:100%;border-collapse:collapse;font-size:12.5px}}
-    .bkg-table th {{text-align:left;padding:6px 8px;border-bottom:2px solid #ddd;color:#555;font-size:12px}}
-    .bkg-table td {{padding:4px 8px;border-bottom:1px solid #f0f0f0}}
-    .bkg-table tr:hover td {{background:#f7f7f7}}
-    </style>
-    <div style="max-height:560px;overflow-y:auto">
-    <table class="bkg-table">
-      <thead><tr><th>URL</th><th style="text-align:right">Bookings</th><th style="text-align:right">TTV (€)</th></tr></thead>
-      <tbody>{rows_html}</tbody>
-    </table></div>
-    """
-    st.markdown(table_html, unsafe_allow_html=True)
+        table_html = f"""
+        <style>
+        .bkg-table {{width:100%;border-collapse:collapse;font-size:12.5px}}
+        .bkg-table th {{text-align:left;padding:6px 8px;border-bottom:2px solid #ddd;color:#555;font-size:12px}}
+        .bkg-table td {{padding:4px 8px;border-bottom:1px solid #f0f0f0}}
+        .bkg-table tr:hover td {{background:#f7f7f7}}
+        </style>
+        <div style="max-height:560px;overflow-y:auto">
+        <table class="bkg-table">
+          <thead><tr><th>URL</th><th style="text-align:right">Bookings</th><th style="text-align:right">TTV (€)</th></tr></thead>
+          <tbody>{rows_html}</tbody>
+        </table></div>
+        """
+        st.markdown(table_html, unsafe_allow_html=True)
 
-# ── Bar columns évolution mensuelle — 2 barres par mois (TTV + Bookings) ──
-st.subheader(f"📈 Évolution mensuelle · Top {top_n} URLs · TTV & Bookings")
+    # ── Bar columns évolution mensuelle — 2 barres par mois (TTV + Bookings) ──
+    st.subheader(f"📈 Évolution mensuelle · Top {top_n} URLs · TTV & Bookings")
 
 ev_mode = st.radio(
     "Afficher :",
@@ -310,10 +505,10 @@ st.plotly_chart(fig_ev, use_container_width=True)
 
 
 # ── Vue par mois ──
-st.divider()
-st.subheader("📅 Vue détaillée par mois")
+with tab2:
+    st.subheader("📅 Vue détaillée par mois")
 
-selected_month_detail = st.selectbox(
+    selected_month_detail = st.selectbox(
     "Choisir un mois", options=sorted(selected_months),
     format_func=lambda x: MONTH_LABELS[x]
 )
@@ -362,6 +557,69 @@ st.dataframe(
 )
 
 # ── Tableau récap fusionné ──
+with tab3:
+  _dest_cats = df_filtered[df_filtered["destination"].notna()].copy() if "destination" in df_filtered.columns else pd.DataFrame()
+  if _dest_cats.empty:
+    st.info("Active la catégorisation pour voir les données par destination.")
+  else:
+    _ttv_dest = _dest_cats[_dest_cats["metric"]=="TTV"].groupby("destination")["value"].sum().reset_index().sort_values("value", ascending=False)
+    _bkg_dest = _dest_cats[_dest_cats["metric"]=="Bookings"].groupby("destination")["value"].sum().reset_index().sort_values("value", ascending=False)
+    _col1, _col2 = st.columns(2)
+    with _col1:
+      fig_dest_ttv = px.bar(_ttv_dest, x="value", y="destination", orientation="h",
+        title="TTV (€) par destination", labels={"value":"TTV (€)","destination":"Destination"},
+        color="value", color_continuous_scale="Blues", height=max(400, len(_ttv_dest)*28))
+      fig_dest_ttv.update_layout(yaxis=dict(autorange="reversed"), coloraxis_showscale=False)
+      st.plotly_chart(fig_dest_ttv, use_container_width=True)
+    with _col2:
+      fig_dest_bkg = px.bar(_bkg_dest, x="value", y="destination", orientation="h",
+        title="Bookings par destination", labels={"value":"Bookings","destination":"Destination"},
+        color="value", color_continuous_scale="Oranges", height=max(400, len(_bkg_dest)*28))
+      fig_dest_bkg.update_layout(yaxis=dict(autorange="reversed"), coloraxis_showscale=False)
+      st.plotly_chart(fig_dest_bkg, use_container_width=True)
+    # Évolution mensuelle par destination
+    st.subheader("📈 Évolution mensuelle par destination")
+    ev_dest_mode = st.radio("Métrique", ["TTV (€)", "Bookings"], horizontal=True, key="ev_dest_mode")
+    _metric = "TTV" if ev_dest_mode == "TTV (€)" else "Bookings"
+    _ev_dest = _dest_cats[_dest_cats["metric"]==_metric].groupby(["month","month_label","destination"])["value"].sum().reset_index()
+    fig_ev_dest = px.bar(_ev_dest, x="month_label", y="value", color="destination", barmode="stack",
+      labels={"value": ev_dest_mode, "month_label":"Mois", "destination":"Destination"},
+      category_orders={"month_label": ordered_month_labels}, height=500)
+    fig_ev_dest.update_layout(legend=dict(orientation="h", yanchor="top", y=-0.2, font=dict(size=9)), margin=dict(b=180))
+    st.plotly_chart(fig_ev_dest, use_container_width=True)
+
+with tab4:
+  _type_cats = df_filtered[df_filtered["type_page"].notna()].copy() if "type_page" in df_filtered.columns else pd.DataFrame()
+  if _type_cats.empty:
+    st.info("Active la catégorisation pour voir les données par type de page.")
+  else:
+    _ttv_type = _type_cats[_type_cats["metric"]=="TTV"].groupby("type_page")["value"].sum().reset_index().sort_values("value", ascending=False)
+    _bkg_type = _type_cats[_type_cats["metric"]=="Bookings"].groupby("type_page")["value"].sum().reset_index().sort_values("value", ascending=False)
+    _col1t, _col2t = st.columns(2)
+    with _col1t:
+      fig_type_ttv = px.bar(_ttv_type, x="value", y="type_page", orientation="h",
+        title="TTV (€) par type de page", labels={"value":"TTV (€)","type_page":"Type"},
+        color="value", color_continuous_scale="Blues", height=max(400, len(_ttv_type)*40))
+      fig_type_ttv.update_layout(yaxis=dict(autorange="reversed"), coloraxis_showscale=False)
+      st.plotly_chart(fig_type_ttv, use_container_width=True)
+    with _col2t:
+      fig_type_bkg = px.bar(_bkg_type, x="value", y="type_page", orientation="h",
+        title="Bookings par type de page", labels={"value":"Bookings","type_page":"Type"},
+        color="value", color_continuous_scale="Oranges", height=max(400, len(_bkg_type)*40))
+      fig_type_bkg.update_layout(yaxis=dict(autorange="reversed"), coloraxis_showscale=False)
+      st.plotly_chart(fig_type_bkg, use_container_width=True)
+    # Évolution mensuelle par type
+    st.subheader("📈 Évolution mensuelle par type de page")
+    ev_type_mode = st.radio("Métrique", ["TTV (€)", "Bookings"], horizontal=True, key="ev_type_mode")
+    _metric_t = "TTV" if ev_type_mode == "TTV (€)" else "Bookings"
+    _ev_type = _type_cats[_type_cats["metric"]==_metric_t].groupby(["month","month_label","type_page"])["value"].sum().reset_index()
+    fig_ev_type = px.bar(_ev_type, x="month_label", y="value", color="type_page", barmode="stack",
+      labels={"value": ev_type_mode, "month_label":"Mois", "type_page":"Type"},
+      category_orders={"month_label": ordered_month_labels}, height=500)
+    fig_ev_type.update_layout(legend=dict(orientation="h", yanchor="top", y=-0.2, font=dict(size=9)), margin=dict(b=180))
+    st.plotly_chart(fig_ev_type, use_container_width=True)
+
+# ── Tableau récap (hors onglets, toujours visible) ──
 st.divider()
 st.subheader("📊 Tableau récap · TTV + Bookings (toute la période sélectionnée)")
 
@@ -374,9 +632,20 @@ df_recap_display["Bookings"]          = df_recap_display["Bookings"].map(lambda 
 df_recap_display["TTV / Booking (€)"] = df_recap_display["TTV / Booking (€)"].map(
     lambda x: f"{x:,.0f}" if pd.notna(x) else "-"
 )
+# Merge catégories dans le récap
+if "type_page" in df_filtered.columns:
+    df_cats = df_filtered[["vp_url", "type_page", "destination"]].drop_duplicates("vp_url")
+    df_recap = df_recap.merge(df_cats, on="vp_url", how="left")
+
 df_recap_display = df_recap_display.rename(columns={
     "campaign_id": "ID", "campaign_name": "Nom campagne", "vp_url": "URL VP"
-})[["ID", "Nom campagne", "URL VP", "TTV (€)", "Bookings", "TTV / Booking (€)"]]
+})
+extra_cols = []
+if "type_page" in df_recap.columns:
+    df_recap_display["Type"] = df_recap["type_page"].values
+    df_recap_display["Destination"] = df_recap["destination"].values
+    extra_cols = ["Type", "Destination"]
+df_recap_display = df_recap_display[["ID", "Nom campagne", "URL VP"] + extra_cols + ["TTV (€)", "Bookings", "TTV / Booking (€)"]]
 
 st.caption(f"Top {top_n} pages triées par TTV décroissant")
 st.dataframe(df_recap_display, use_container_width=True, hide_index=True)
