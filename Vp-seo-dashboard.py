@@ -241,22 +241,9 @@ def load_data(tableau_file, carambola_file):
         columns={"Campaign id": "campaign_id", "Campaign name": "campaign_name"}
     )
 
-    # Lecture CSV — force sep=";" (format Tableau VP)
+    # Lecture CSV — séparateur ";"
     df_tab = pd.read_csv(tableau_file, sep=";", engine="python")
     df_tab.columns = df_tab.columns.str.strip()
-
-    # Vérification des colonnes attendues
-    _expected = {"Campaign Id (h1)", "Measure Names", "Measure Values", "Date granularity", "Registration Year"}
-    _missing = _expected - set(df_tab.columns)
-    if _missing:
-        st.error(
-            f"❌ Le fichier Tableau ne contient pas les colonnes attendues.\n\n"
-            f"**Colonnes manquantes :** {', '.join(_missing)}\n\n"
-            f"**Colonnes trouvées :** {', '.join(df_tab.columns.tolist())}\n\n"
-            "Assure-toi d'exporter le fichier Tableau **par campagne** (avec Campaign Id)."
-        )
-        st.stop()
-
     df_tab = df_tab.rename(columns={
         "Campaign Id (h1)": "campaign_id",
         "Measure Names":    "metric",
