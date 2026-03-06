@@ -34,6 +34,8 @@ CATEGORY_RULES = {
 
 def categorize_url_rules(url):
     """Catégorisation rapide par règles sans API."""
+    if not url or not isinstance(url, str):
+        return "Autre"
     slug = url.lower().split("/offres/")[-1] if "/offres/" in url else url.lower()
     for cat, patterns in CATEGORY_RULES.items():
         for p in patterns:
