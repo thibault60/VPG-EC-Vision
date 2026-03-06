@@ -313,7 +313,7 @@ if enable_cat:
 else:
     df_filtered["type_page"]   = df_filtered["vp_url"].apply(lambda u: categorize_url_rules(u) or "Voyage")
     df_filtered["destination"] = df_filtered["vp_url"].apply(
-        lambda u: extract_destination_rules(u.lower().split("/offres/")[-1] if "/offres/" in u else "")
+        lambda u: extract_destination_rules(u.lower().split("/offres/")[-1] if isinstance(u, str) and "/offres/" in u else "") if isinstance(u, str) else None
     )
 
 # Mise à jour dynamique des filtres sidebar
