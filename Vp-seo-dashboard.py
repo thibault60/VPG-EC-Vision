@@ -224,21 +224,19 @@ df_bkg_monthly = (
 )
 df_monthly = df_ttv_monthly.merge(df_bkg_monthly, on=["month", "month_label"], how="outer").sort_values("month")
 
-fig_ev = go.Figure()
+fig_ev = make_subplots(specs=[[{"secondary_y": True}]])
 fig_ev.add_trace(go.Bar(
     x=df_monthly["month_label"],
     y=df_monthly["TTV (€)"],
     name="TTV (€)",
     marker_color="#1d6fa4",
-    yaxis="y1",
-))
+), secondary_y=False)
 fig_ev.add_trace(go.Bar(
     x=df_monthly["month_label"],
     y=df_monthly["Bookings"],
     name="Bookings",
     marker_color="#f4a840",
-    yaxis="y2",
-))
+), secondary_y=True)
 fig_ev.update_layout(
     barmode="group",
     height=550,
@@ -248,12 +246,11 @@ fig_ev.update_layout(
         tickfont=dict(size=12),
         tickangle=-30,
     ),
-    yaxis=dict(title="TTV (€)", titlefont=dict(color="#1d6fa4"), tickfont=dict(color="#1d6fa4")),
-    yaxis2=dict(title="Bookings", titlefont=dict(color="#f4a840"), tickfont=dict(color="#f4a840"),
-                overlaying="y", side="right"),
     legend=dict(orientation="h", yanchor="bottom", y=1.02, font=dict(size=11)),
     margin=dict(t=40, b=60, l=60, r=60),
 )
+fig_ev.update_yaxes(title_text="TTV (€)", titlefont=dict(color="#1d6fa4"), tickfont=dict(color="#1d6fa4"), secondary_y=False)
+fig_ev.update_yaxes(title_text="Bookings", titlefont=dict(color="#f4a840"), tickfont=dict(color="#f4a840"), secondary_y=True)
 st.plotly_chart(fig_ev, use_container_width=True)
 
 
