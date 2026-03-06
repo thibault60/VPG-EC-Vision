@@ -3,107 +3,11 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-import json
-from urllib.parse import urlencode
-from google.oauth2.credentials import Credentials
-from google.auth.transport.requests import Request
-from googleapiclient.discovery import build
 
 st.set_page_config(page_title="VP SEO Dashboard", page_icon="🗺️", layout="wide")
 
 
-# ──────────────────────────────────────────
-# GSC OAUTH2 FLOW
-# ──────────────────────────────────────────
 
-GSC_SCOPES = ["https://www.googleapis.com/auth/webmasters.readonly"]
-
-def get_gsc_auth_url():
-    try:
-        cfg = st.secrets["gsc"]
-        params = {
-            "client_id": cfg["client_id"],
-            "redirect_uri": cfg["redirect_uri"],
-            "response_type": "code",
-            "scope": " ".join(GSC_SCOPES),
-            "access_type": "offline",
-            "prompt": "consent",
-        }
-        return "https://accounts.google.com/o/oauth2/v2/auth?" + urlencode(params)
-    except Exception:
-        return None
-
-def exchange_code_for_token(code):
-    import urllib.request
-    cfg = st.secrets["gsc"]
-    data = urlencode({
-        "code": code,
-        "client_id": cfg["client_id"],
-        "client_secret": cfg["client_secret"],
-        "redirect_uri": cfg["redirect_uri"],
-        "grant_type": "authorization_code",
-    }).encode()
-    req = urllib.request.Request("https://oauth2.googleapis.com/token", data=data, method="POST")
-    with urllib.request.urlopen(req) as r:
-        return json.loads(r.read())
-
-def get_gsc_credentials():
-    token_data = st.session_state.get("gsc_token")
-    if not token_data:
-        return None
-    cfg = st.secrets.get("gsc", {})
-    creds = Credentials(
-        token=token_data.get("access_token"),
-        refresh_token=token_data.get("refresh_token"),
-        token_uri="https://oauth2.googleapis.com/token",
-        client_id=cfg.get("client_id"),
-        client_secret=cfg.get("client_secret"),
-    )
-    if creds.expired:
-        try:
-            creds.refresh(Request())
-            st.session_state["gsc_token"]["access_token"] = creds.token
-        except Exception:
-            st.session_state.pop("gsc_token", None)
-            return None
-    return creds
-
-@st.cache_data(ttl=3600, show_spinner="Chargement des données GSC...")
-def fetch_gsc_clicks(_creds_json, site_url, urls, start_date, end_date):
-    """Récupère les clicks GSC pour une liste d'URLs sur une période."""
-    creds = Credentials(**json.loads(_creds_json))
-    service = build("searchconsole", "v1", credentials=creds)
-    results = {}
-    for url in urls:
-        try:
-            resp = service.searchanalytics().query(
-                siteUrl=site_url,
-                body={
-                    "startDate": start_date,
-                    "endDate": end_date,
-                    "dimensions": ["page"],
-                    "dimensionFilterGroups": [{
-                        "filters": [{"dimension": "page", "operator": "equals", "expression": url}]
-                    }],
-                    "rowLimit": 1,
-                }
-            ).execute()
-            rows = resp.get("rows", [])
-            results[url] = int(rows[0]["clicks"]) if rows else 0
-        except Exception:
-            results[url] = 0
-    return results
-
-# Gérer le callback OAuth (code dans l'URL)
-qp = st.query_params
-if "code" in qp and "gsc_token" not in st.session_state:
-    try:
-        token = exchange_code_for_token(qp["code"])
-        st.session_state["gsc_token"] = token
-        st.query_params.clear()
-        st.rerun()
-    except Exception as e:
-        st.warning(f"Erreur auth GSC : {e}")
 
 MONTH_LABELS = {
     1: "Janvier", 2: "Février", 3: "Mars", 4: "Avril",
@@ -214,42 +118,7 @@ with st.sidebar:
     )
     top_n = st.slider("Top N pages", min_value=5, max_value=150, value=10)
 
-    # ── GSC Connection ──
-    st.divider()
-    st.header("🔍 Google Search Console")
-    gsc_creds = get_gsc_credentials()
-    if gsc_creds:
-        st.success("✅ GSC connecté")
-        if st.button("Déconnecter"):
-            st.session_state.pop("gsc_token", None)
-            st.rerun()
-        gsc_site = st.text_input("URL propriété GSC", value="https://www.voyage-prive.com/")
 
-        # ── DEBUG ──
-        with st.expander("🔧 Debug GSC", expanded=False):
-            st.write("Token présent :", bool(gsc_creds.token))
-            st.write("Token expiré :", gsc_creds.expired)
-            st.write("Site URL :", gsc_site)
-            if st.button("Tester l'API GSC"):
-                try:
-                    from googleapiclient.discovery import build
-                    svc = build("searchconsole", "v1", credentials=gsc_creds)
-                    sites = svc.sites().list().execute()
-                    st.success("Propriétés GSC accessibles :")
-                    for s in sites.get("siteEntry", []):
-                        st.write("→", s["siteUrl"], "|", s["permissionLevel"])
-                except Exception as e:
-                    st.error(f"Erreur : {e}")
-    else:
-        auth_url = get_gsc_auth_url()
-        if auth_url:
-            st.markdown(f'''<a href="{auth_url}" target="_self">
-                <button style="background:#4285F4;color:white;border:none;padding:8px 16px;
-                border-radius:4px;cursor:pointer;font-size:14px">
-                🔑 Connecter Google</button></a>''', unsafe_allow_html=True)
-        else:
-            st.caption("Ajouter [gsc] dans st.secrets pour activer")
-        gsc_site = None
 
 df_filtered = df[df["month"].isin(selected_months)].copy()
 ordered_month_labels = [MONTH_LABELS[m] for m in sorted(selected_months)]
@@ -499,43 +368,17 @@ st.subheader("📊 Tableau récap · TTV + Bookings (toute la période sélectio
 df_recap = df_merged_global.sort_values("TTV", ascending=False).copy()
 df_recap["TTV / Booking (€)"] = (df_recap["TTV"] / df_recap["Bookings"].replace(0, float("nan"))).round(0)
 
-# Ajouter les clicks GSC si connecté
-gsc_creds_live = get_gsc_credentials()
-df_recap_gsc = df_recap.head(top_n).copy()
-if gsc_creds_live and gsc_site:
-    urls_to_fetch = df_recap_gsc["vp_url"].dropna().tolist()
-    start_date = f"2025-{min(selected_months):02d}-01"
-    end_date   = f"2025-{max(selected_months):02d}-28"
-    creds_json = json.dumps({
-        "token": gsc_creds_live.token,
-        "refresh_token": gsc_creds_live.refresh_token,
-        "token_uri": gsc_creds_live.token_uri,
-        "client_id": gsc_creds_live.client_id,
-        "client_secret": gsc_creds_live.client_secret,
-    })
-    gsc_clicks = fetch_gsc_clicks(creds_json, gsc_site, urls_to_fetch, start_date, end_date)
-    df_recap_gsc["Clicks GSC"] = df_recap_gsc["vp_url"].map(gsc_clicks).fillna(0).astype(int)
-    has_gsc = True
-else:
-    has_gsc = False
-
-df_recap_display = df_recap_gsc.copy()
+df_recap_display = df_recap.head(top_n).copy()
 df_recap_display["TTV (€)"]           = df_recap_display["TTV"].map(lambda x: f"{x:,.0f}")
 df_recap_display["Bookings"]          = df_recap_display["Bookings"].map(lambda x: f"{int(x):,}")
 df_recap_display["TTV / Booking (€)"] = df_recap_display["TTV / Booking (€)"].map(
     lambda x: f"{x:,.0f}" if pd.notna(x) else "-"
 )
-if has_gsc:
-    df_recap_display["Clicks GSC"] = df_recap_display["Clicks GSC"].map(lambda x: f"{int(x):,}")
-
-base_cols = ["ID", "Nom campagne", "URL VP", "TTV (€)", "Bookings", "TTV / Booking (€)"]
-recap_cols = base_cols + (["Clicks GSC"] if has_gsc else [])
 df_recap_display = df_recap_display.rename(columns={
     "campaign_id": "ID", "campaign_name": "Nom campagne", "vp_url": "URL VP"
-})[recap_cols]
+})[["ID", "Nom campagne", "URL VP", "TTV (€)", "Bookings", "TTV / Booking (€)"]]
 
-gsc_label = " · Clicks GSC inclus ✅" if has_gsc else " · 🔍 Connecte GSC (sidebar) pour voir les clicks"
-st.caption(f"Top {top_n} pages triées par TTV décroissant{gsc_label}")
+st.caption(f"Top {top_n} pages triées par TTV décroissant")
 st.dataframe(df_recap_display, use_container_width=True, hide_index=True)
 
 col_dl1, col_dl2 = st.columns(2)
