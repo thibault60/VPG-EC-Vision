@@ -37,8 +37,8 @@ CATEGORY_RULES = [
                          "sejour-et-voyage-"]),
     ("Ski",             ["ski-"]),
     ("Ventes privées",  ["vente-privee", "ventes-privees", "promo-", "bon-plan",
-                         "offres-black-friday", "sejour-et-voyage-pas-cher",
-                         "vente-privee-pour", "promo-vacances"]),
+                         "bons-plans", "bons-plan", "offres-black-friday",
+                         "sejour-et-voyage-pas-cher", "vente-privee-pour", "promo-vacances"]),
     ("Vacances",        ["vacances-", "vacance-", "vacances-famille", "vacances-pas-cheres"]),
     ("Week-end",        ["week-end-", "week-ends-", "week-end-a-", "week-end-au-",
                          "week-end-tout-compris"]),
@@ -304,7 +304,7 @@ with st.sidebar:
     if not selected_months:
         selected_months = months_available
 
-    top_n = st.slider("Top N pages", min_value=5, max_value=150, value=10)
+    top_n = st.number_input("Nombre de pages à analyser", min_value=5, max_value=10000, value=50, step=5)
 
     st.divider()
     st.header("🤖 Catégorisation GPT")
@@ -412,6 +412,8 @@ df_bkg_global = (
 top_ids = df_ttv_global["campaign_id"].tolist()
 df_merged_global = df_ttv_global.merge(df_bkg_global, on=["campaign_id", "campaign_name", "vp_url", "url_label"], how="left")
 df_merged_global["Bookings"] = df_merged_global["Bookings"].fillna(0)
+# Exclure les lignes où TTV ET Bookings sont à 0
+df_merged_global = df_merged_global[(df_merged_global["TTV"] > 0) | (df_merged_global["Bookings"] > 0)]
 df_merged_global = df_merged_global.sort_values("TTV", ascending=True)  # pour bar horizontal
 
 # ──────────────────────────────────────────
