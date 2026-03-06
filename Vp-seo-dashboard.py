@@ -292,6 +292,7 @@ with st.sidebar:
         st.session_state["run_categorization"] = True
     if st.button("🗑️ Réinitialiser", use_container_width=True):
         st.session_state["run_categorization"] = False
+        st.session_state.pop("cats_cache", None)
         st.cache_data.clear()
     enable_cat = st.session_state.get("run_categorization", False)
 
@@ -304,12 +305,16 @@ df_filtered = df[df["month"].isin(selected_months)].copy()
 ordered_month_labels = [MONTH_LABELS[m] for m in sorted(selected_months)]
 
 # ── Catégorisation des URLs ──
+# Catégorisation sur TOUTES les URLs du dataset (pas filtrées par mois)
+all_urls_full = df["vp_url"].dropna().unique().tolist()
+
 if enable_cat:
-    all_urls = df_filtered["vp_url"].dropna().unique().tolist()
-    with st.spinner("Catégorisation des URLs..."):
-        cats = categorize_urls_gpt(tuple(all_urls), openai_key or "")
-    df_filtered["type_page"]   = df_filtered["vp_url"].map(lambda u: cats.get(u, {}).get("type", "Autre"))
-    df_filtered["destination"] = df_filtered["vp_url"].map(lambda u: cats.get(u, {}).get("destination"))
+    if "cats_cache" not in st.session_state:
+        with st.spinner("Catégorisation des URLs..."):
+            st.session_state["cats_cache"] = categorize_urls_gpt(tuple(all_urls_full), openai_key or "")
+    cats = st.session_state["cats_cache"]
+    df_filtered["type_page"]   = df_filtered["vp_url"].map(lambda u: cats.get(u, {}).get("type", "Autre") if isinstance(u, str) else "Autre")
+    df_filtered["destination"] = df_filtered["vp_url"].map(lambda u: cats.get(u, {}).get("destination") if isinstance(u, str) else None)
 else:
     df_filtered["type_page"]   = df_filtered["vp_url"].apply(lambda u: categorize_url_rules(u) or "Voyage")
     df_filtered["destination"] = df_filtered["vp_url"].apply(
