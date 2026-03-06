@@ -244,17 +244,12 @@ color_map = {lbl: palette[i % len(palette)] for i, lbl in enumerate(url_labels_o
 
 fig_ev = make_subplots(specs=[[{"secondary_y": True}]])
 
-# TTV : barres empilées pleines par URL (axe gauche)
-# Bookings : barres outline transparentes empilées par URL (axe droit)
+# ── Barres empilées TTV par URL (axe gauche) ──
 for cid in top_ids:
     lbl = df_merged_global[df_merged_global["campaign_id"] == cid]["url_label"].values
     lbl = lbl[0] if len(lbl) else "ID:" + str(cid)
     color = color_map.get(lbl, "#888")
-
     row_ttv = df_ttv_agg[df_ttv_agg["campaign_id"] == cid].sort_values("month")
-    row_bkg = df_bkg_agg[df_bkg_agg["campaign_id"] == cid].sort_values("month")
-
-    # Colonne TTV — pleine
     fig_ev.add_trace(go.Bar(
         x=row_ttv["month_label"],
         y=row_ttv["value"],
@@ -265,33 +260,39 @@ for cid in top_ids:
         hovertemplate="<b>%{fullData.name}</b><br>TTV : %{y:,.0f} €<extra></extra>"
     ), secondary_y=False)
 
-    # Colonne Bookings — outline seulement (crochet)
-    fig_ev.add_trace(go.Bar(
-        x=row_bkg["month_label"],
-        y=row_bkg["value"],
-        name=lbl,
-        marker=dict(
-            color="rgba(0,0,0,0)",
-            line=dict(color=color, width=2)
-        ),
-        legendgroup=lbl,
-        showlegend=False,
-        hovertemplate="<b>%{fullData.name}</b><br>Bookings : %{y:,.0f}<extra></extra>"
-    ), secondary_y=True)
+# ── Ligne Bookings total (axe droit) ──
+df_bkg_total = (
+    df_bkg_agg[df_bkg_agg["campaign_id"].isin(top_ids)]
+    .groupby(["month", "month_label"])["value"].sum()
+    .reset_index().sort_values("month")
+)
+fig_ev.add_trace(go.Scatter(
+    x=df_bkg_total["month_label"],
+    y=df_bkg_total["value"],
+    name="Bookings (total)",
+    mode="lines+markers",
+    line=dict(color="white", width=2.5, dash="solid"),
+    marker=dict(color="white", size=7, line=dict(color="#333", width=1.5)),
+    hovertemplate="Bookings total : <b>%{y:,.0f}</b><extra></extra>"
+), secondary_y=True)
 
 fig_ev.update_layout(
     barmode="stack",
     height=650,
+    plot_bgcolor="#1e1e2e",
+    paper_bgcolor="#1e1e2e",
+    font=dict(color="white"),
     xaxis=dict(
         categoryorder="array",
         categoryarray=ordered_month_labels,
         tickangle=-30,
         tickfont=dict(size=11),
+        gridcolor="#333",
     ),
     legend=dict(orientation="h", yanchor="top", y=-0.2, font=dict(size=9)),
     margin=dict(t=40, b=180, l=60, r=60),
 )
-fig_ev.update_yaxes(title_text="TTV (€)", secondary_y=False)
+fig_ev.update_yaxes(title_text="TTV (€)", secondary_y=False, gridcolor="#333")
 fig_ev.update_yaxes(title_text="Bookings", secondary_y=True, showgrid=False)
 st.plotly_chart(fig_ev, use_container_width=True)
 
