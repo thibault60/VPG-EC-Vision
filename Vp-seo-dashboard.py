@@ -15,69 +15,69 @@ st.set_page_config(page_title="VP SEO Dashboard", page_icon="🗺️", layout="w
 # CATÉGORISATION GPT DES URLS
 # ──────────────────────────────────────────
 
-# Ordre important : du plus spécifique au plus général
+# Ordre : du plus spécifique au plus général
+# Chaque tuple : (catégorie, [patterns slug])
 CATEGORY_RULES = [
-    # 1 — All inclusive / Tout compris
-    ("All inclusive",   ["all-inclusive", "tout-compris", "tout-inclus", "vacances-et-sejours-all-inclusive", "bali-tout-compris"]),
-    # 2 — Circuit / Autotour
-    ("Circuit",         ["circuit-", "autotour"]),
-    # 3 — Dernière minute
-    ("Dernière minute", ["last-minute", "derniere-minute", "dernieres-minutes", "depart-demain", "derniere-minute-"]),
-    # 4 — Hôtel
-    ("Hôtel",           ["hotel-", "hotels-"]),
-    # 5 — Meilleurs / Guide top
-    ("Meilleurs",       ["top-", "meilleurs-hotels", "meilleurs-hotels-clubs", "les-meilleurs"]),
-    # 7 — Où partir
-    ("Où partir",       ["ou-partir", "Ou-partir"]),
-    # 8 — Quand partir
-    ("Quand partir",    ["quand-partir"]),
-    # 9 — Séjour
-    ("Séjour",          ["sejour-", "sejours-", "offres-sejours"]),
-    # 10 — Ski
-    ("Ski",             ["ski-", "ski-a-", "ski-aux-", "ski-dans-", "ski-en-"]),
-    # 11 — Vacances
-    ("Vacances",        ["vacances-", "vacance-"]),
-    # 12 — Ventes privées / Promo
-    ("Ventes privées",  ["vente-privee", "ventes-privees", "promo-", "bon-plan", "offres-black-friday", "sejour-et-voyage-pas-cher"]),
-    # 13 — Vol + Hôtel
-    ("Vol + Hôtel",     ["vol-hotel"]),
-    # 14 — Voyage
-    ("Voyage",          ["voyage-"]),
-    # 15 — Week-end
-    ("Week-end",        ["week-end-", "week-ends-"]),
-    # 17 — Que faire
+    ("All inclusive",   ["all-inclusive", "tout-compris", "tout-inclus", "tout-inclus",
+                         "vacances-et-sejours-all-inclusive", "bali-tout-compris",
+                         "voyage-tout-compris", "voyage-tout-inclus", "derniere-minute-tout-inclus",
+                         "week-end-tout-compris", "sejours-tout-compris", "voyage-derniere-minute-tout-inclus"]),
+    ("Circuit",         ["circuit-", "autotour", "circuits-", "voyage-organise-"]),
+    ("Dernière minute", ["last-minute", "derniere-minute", "dernieres-minutes",
+                         "depart-demain", "derniere-chance", "croisieres-sur-le-nil-last-minute"]),
+    ("Vol + Hôtel",     ["vol-hotel", "vols-plus-hotels", "vol-plus-hotel"]),
+    ("Hôtel",           ["hotel-", "hotels-", "hotel-en-", "hotel-a-", "hotel-au-",
+                         "hotel-all-inclusive"]),
+    ("Meilleurs",       ["top-", "meilleurs-hotels", "meilleurs-hotels-clubs",
+                         "les-meilleurs", "top-5-", "top-9-", "top-10-"]),
+    ("Où partir",       ["ou-partir", "Ou-partir", "ou-partir-", "quand-partir"]),
     ("Que faire",       ["que-faire"]),
-    # Combiné / Croisière
-    ("Combiné",         ["combine-"]),
-    ("Croisière",       ["croisiere"]),
-    # Autre
-    ("Autre",           ["login", "voyage-pirates"]),
+    ("Séjour",          ["sejour-", "sejours-", "offres-sejours", "sejour-a-", "sejour-au-",
+                         "sejour-en-", "sejours-en-", "sejours-aux-", "sejours-de-luxe",
+                         "sejour-et-voyage-"]),
+    ("Ski",             ["ski-"]),
+    ("Ventes privées",  ["vente-privee", "ventes-privees", "promo-", "bon-plan",
+                         "offres-black-friday", "sejour-et-voyage-pas-cher",
+                         "vente-privee-pour", "promo-vacances"]),
+    ("Vacances",        ["vacances-", "vacance-", "vacances-famille", "vacances-pas-cheres"]),
+    ("Week-end",        ["week-end-", "week-ends-", "week-end-a-", "week-end-au-",
+                         "week-end-tout-compris"]),
+    ("Voyage",          ["voyage-", "voyages-", "voyage-au-", "voyage-en-",
+                         "voyage-aux-", "voyage-dans-"]),
+    ("Combiné",         ["combine-", "combined-"]),
+    ("Croisière",       ["croisiere", "nil-last-minute"]),
+    ("Home / Login",    ["login", "login/index"]),
+    ("Autre",           ["voyage-pirates", "offres-black-friday"]),
 ]
 
 def categorize_url_rules(url):
-    """Catégorisation par règles — ordre du plus spécifique au plus général."""
+    """Catégorisation par règles — retourne None si non reconnu (→ envoi à GPT)."""
     if not url or not isinstance(url, str):
         return "Autre"
+    # Cas spécial login
+    if "login" in url:
+        return "Home / Login"
     slug = url.lower().split("/offres/")[-1] if "/offres/" in url else url.lower()
     for cat, patterns in CATEGORY_RULES:
         for p in patterns:
             if slug.startswith(p.lower()) or p.lower() in slug:
                 return cat
-    return "Voyage"  # fallback
+    return None  # → GPT traitera ce cas
 
 @st.cache_data(ttl=86400, show_spinner=False)
 def categorize_urls_gpt(urls_tuple, openai_key):
     """Envoie les URLs non catégorisées à GPT en batch et retourne {url: {type, destination}}."""
     urls = list(urls_tuple)
     
-    # Catégorisation par règles d'abord
+    # Catégorisation par règles d'abord — None = non reconnu → GPT
     result = {}
     to_gpt = []
     for url in urls:
         cat = categorize_url_rules(url)
-        slug = url.lower().split("/offres/")[-1] if "/offres/" in url else ""
-        if cat:
-            result[url] = {"type": cat, "destination": extract_destination_rules(slug)}
+        slug = url.lower().split("/offres/")[-1] if "/offres/" in url else url.lower().split("voyage-prive.com/")[-1]
+        dest = extract_destination_rules(slug)
+        if cat is not None:
+            result[url] = {"type": cat, "destination": dest}
         else:
             to_gpt.append(url)
 
@@ -295,10 +295,25 @@ df = load_data(tableau_file, carambola_file)
 with st.sidebar:
     st.header("🔧 Filtres")
     months_available = sorted(df["month"].unique())
+
+    # Boutons de sélection rapide des mois
+    _col_q = st.columns(5)
+    if _col_q[0].button("Tout", use_container_width=True):
+        st.session_state["sel_months"] = months_available
+    quarters = {"T1":[1,2,3],"T2":[4,5,6],"T3":[7,8,9],"T4":[10,11,12]}
+    for i,(qname,qmonths) in enumerate(quarters.items()):
+        if _col_q[i+1].button(qname, use_container_width=True):
+            st.session_state["sel_months"] = [m for m in qmonths if m in months_available]
+
+    if "sel_months" not in st.session_state:
+        st.session_state["sel_months"] = months_available
+
     selected_months = st.multiselect(
-        "Mois", options=months_available, default=months_available,
-        format_func=lambda x: MONTH_LABELS[x]
+        "Mois", options=months_available,
+        default=[m for m in st.session_state["sel_months"] if m in months_available],
+        format_func=lambda x: MONTH_LABELS[x], key="months_ms"
     )
+    st.session_state["sel_months"] = selected_months
     top_n = st.slider("Top N pages", min_value=5, max_value=150, value=10)
 
     st.divider()
@@ -347,8 +362,14 @@ else:
 all_types = sorted(df_filtered["type_page"].dropna().unique().tolist())
 all_dests = sorted(df_filtered["destination"].dropna().unique().tolist())
 
+ALL_KNOWN_TYPES = sorted(set([cat for cat, _ in CATEGORY_RULES]))
+
 with st.sidebar:
-    filter_type = st.multiselect("Type de page", options=all_types, key="filter_type_dyn")
+    filter_type = st.multiselect(
+        "Schéma de recherche",
+        options=all_types if all_types else ALL_KNOWN_TYPES,
+        key="filter_type_dyn"
+    )
     filter_dest = st.multiselect("Destination", options=all_dests, key="filter_dest_dyn")
 
 if filter_type:
@@ -558,12 +579,18 @@ if ev_mode in ("TTV + Bookings", "Bookings uniquement"):
         (hm_col2, "Bookings", "Bookings", "Oranges"),
     ]:
         with hm_col:
+            # Utilise vp_url (sans domaine) — exclut les lignes sans URL réelle
+            _df_hm_src = df_filtered[df_filtered["metric"] == hm_metric].copy()
+            _df_hm_src = _df_hm_src[_df_hm_src["vp_url"].notna()].copy()
+            _df_hm_src["_url_display"] = _df_hm_src["vp_url"].str.replace(
+                "https://www.voyage-prive.com/", "", regex=False
+            )
             df_hm = (
-                df_filtered[df_filtered["metric"] == hm_metric]
-                .groupby(["url_label", "month"])["value"].sum()
+                _df_hm_src
+                .groupby(["_url_display", "month"])["value"].sum()
                 .reset_index()
             )
-            df_hm_piv = df_hm.pivot(index="url_label", columns="month", values="value").fillna(0)
+            df_hm_piv = df_hm.pivot(index="_url_display", columns="month", values="value").fillna(0)
             # Trier par total décroissant, garder top_n
             df_hm_piv["_total"] = df_hm_piv.sum(axis=1)
             df_hm_piv = df_hm_piv.sort_values("_total", ascending=False).head(top_n).drop(columns="_total")
@@ -676,6 +703,9 @@ with tab4:
   if _type_cats.empty:
     st.info("Active la catégorisation pour voir les données par type de page.")
   else:
+    _hide_autre = st.checkbox("Masquer 'Autre'", value=True, key="hide_autre_tab4")
+    if _hide_autre:
+        _type_cats = _type_cats[_type_cats["type_page"] != "Autre"]
     _ttv_type = _type_cats[_type_cats["metric"]=="TTV"].groupby("type_page")["value"].sum().reset_index().sort_values("value", ascending=False)
     _bkg_type = _type_cats[_type_cats["metric"]=="Bookings"].groupby("type_page")["value"].sum().reset_index().sort_values("value", ascending=False)
     _col1t, _col2t = st.columns(2)
@@ -736,7 +766,10 @@ st.dataframe(df_recap_display, use_container_width=True, hide_index=True)
 col_dl1, col_dl2 = st.columns(2)
 
 with col_dl1:
-    csv = df_recap[["campaign_id", "campaign_name", "vp_url", "TTV", "Bookings", "TTV / Booking (€)"]].to_csv(index=False).encode("utf-8")
+    _csv_cols = ["campaign_id", "campaign_name", "vp_url", "TTV", "Bookings", "TTV / Booking (€)"]
+    if "type_page" in df_recap.columns:
+        _csv_cols += ["type_page", "destination"]
+    csv = df_recap[_csv_cols].rename(columns={"type_page": "Schéma de recherche", "destination": "Destination"}).to_csv(index=False).encode("utf-8")
     st.download_button(
         label="⬇️ Exporter CSV",
         data=csv, file_name="vp_seo_recap.csv", mime="text/csv"
@@ -754,7 +787,8 @@ with col_dl2:
         # ── Onglet 1 : Récap ──
         ws1 = wb.active
         ws1.title = "Récap TTV + Bookings"
-        headers = ["ID", "Nom campagne", "URL VP", "TTV (€)", "Bookings", "TTV / Booking (€)"]
+        has_cats = "type_page" in df_recap_raw.columns
+        headers = ["ID", "Nom campagne", "URL VP"] + (["Schéma de recherche", "Destination"] if has_cats else []) + ["TTV (€)", "Bookings", "TTV / Booking (€)"]
         ws1.append(headers)
         for cell in ws1[1]:
             cell.font = Font(bold=True, color="FFFFFF")
@@ -762,11 +796,9 @@ with col_dl2:
             cell.alignment = Alignment(horizontal="center")
         for _, row in df_recap_raw.iterrows():
             tvb = row["TTV"] / row["Bookings"] if row["Bookings"] > 0 else None
-            ws1.append([
-                int(row["campaign_id"]), row["campaign_name"], row["vp_url"],
-                round(row["TTV"], 0), int(row["Bookings"]),
-                round(tvb, 0) if tvb else ""
-            ])
+            base = [int(row["campaign_id"]), row["campaign_name"], row["vp_url"]]
+            cats = [row.get("type_page", ""), row.get("destination", "")] if has_cats else []
+            ws1.append(base + cats + [round(row["TTV"], 0), int(row["Bookings"]), round(tvb, 0) if tvb else ""])
         for col in ws1.columns:
             ws1.column_dimensions[get_column_letter(col[0].column)].width = max(len(str(c.value or "")) for c in col) + 4
 
