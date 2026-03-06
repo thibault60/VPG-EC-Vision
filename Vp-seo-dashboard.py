@@ -297,35 +297,16 @@ st.markdown("Top pages par mois · TTV & Bookings")
 
 with st.sidebar:
     st.header("📂 Fichiers de données")
-
-    # Fichiers par défaut dans le repo
-    DEFAULT_TABLEAU   = os.path.join(os.path.dirname(__file__), "data", "Act data_data.csv")
-    DEFAULT_CARAMBOLA = os.path.join(os.path.dirname(__file__), "data", "campaign-export-fr-period-between_01_01_2025_12_31_2025.xlsx")
-
-    _has_default_t = os.path.exists(DEFAULT_TABLEAU)
-    _has_default_c = os.path.exists(DEFAULT_CARAMBOLA)
-
-    if _has_default_t and _has_default_c:
-        st.success("✅ Fichiers par défaut chargés depuis le repo")
-        st.caption("Tu peux écraser avec tes propres fichiers ci-dessous.")
-    else:
-        st.warning("Aucun fichier par défaut trouvé dans /data/")
-
-    tableau_file   = st.file_uploader("📄 Écraser Tableau (CSV)",    type=["csv"],  key="up_tab")
-    carambola_file = st.file_uploader("📄 Écraser Carambola (XLSX)", type=["xlsx"], key="up_cara")
-
+    tableau_file   = st.file_uploader("Export Tableau (CSV)",    type=["csv"])
+    carambola_file = st.file_uploader("Export Carambola (XLSX)", type=["xlsx"])
     st.divider()
-    st.caption("Les fichiers uploadés ne sont pas stockés — traitement local.")
+    st.caption("Les fichiers ne sont pas stockés — traitement local.")
 
-# Résolution : upload prioritaire, sinon fichier repo, sinon erreur
-_tableau_src   = tableau_file   if tableau_file   else (DEFAULT_TABLEAU   if os.path.exists(DEFAULT_TABLEAU)   else None)
-_carambola_src = carambola_file if carambola_file else (DEFAULT_CARAMBOLA if os.path.exists(DEFAULT_CARAMBOLA) else None)
-
-if not _tableau_src or not _carambola_src:
+if not tableau_file or not carambola_file:
     st.info("👈 Charge les deux fichiers dans la sidebar pour commencer.")
     st.stop()
 
-df = load_data(_tableau_src, _carambola_src)
+df = load_data(tableau_file, carambola_file)
 
 with st.sidebar:
     st.header("🔧 Filtres")
