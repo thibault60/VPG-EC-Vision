@@ -43,7 +43,7 @@ def categorize_url_rules(url):
 
 @st.cache_data(ttl=86400, show_spinner=False)
 def categorize_urls_gpt(urls_tuple, openai_key):
-    """Envoie les URLs non catégorisées à Claude en batch et retourne {url: {type, destination}}."""
+    """Envoie les URLs non catégorisées à GPT en batch et retourne {url: {type, destination}}."""
     urls = list(urls_tuple)
     
     # Catégorisation par règles d'abord
@@ -58,15 +58,14 @@ def categorize_urls_gpt(urls_tuple, openai_key):
             to_gpt.append(url)
 
     # Récupère la clé Claude depuis st.secrets ou le champ manuel
-    claude_key = ""
-    try:
-        claude_key = st.secrets["anthropic"]["api_key"]
-    except Exception:
-        pass
-    if not claude_key:
-        claude_key = openai_key  # fallback: champ sidebar si renseigné
+    _openai_key = openai_key
+    if not _openai_key:
+        try:
+            _openai_key = st.secrets["openai"]["api_key"]
+        except Exception:
+            pass
 
-    if not to_gpt or not claude_key:
+    if not to_gpt or not _openai_key:
         for url in to_gpt:
             slug = url.lower().split("/offres/")[-1] if "/offres/" in url else ""
             result[url] = {"type": "Voyage", "destination": extract_destination_rules(slug)}
@@ -88,22 +87,17 @@ Réponds UNIQUEMENT avec un objet JSON valide, sans markdown, sans explication :
 
         try:
             resp = requests.post(
-                "https://api.anthropic.com/v1/messages",
-                headers={
-                    "x-api-key": claude_key,
-                    "anthropic-version": "2023-06-01",
-                    "content-type": "application/json",
-                },
+                "https://api.openai.com/v1/chat/completions",
+                headers={"Authorization": f"Bearer {_openai_key}", "Content-Type": "application/json"},
                 json={
-                    "model": "claude-haiku-4-5-20251001",
-                    "max_tokens": 2048,
+                    "model": "gpt-4o-mini",
                     "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0,
+                    "response_format": {"type": "json_object"},
                 },
                 timeout=30
             )
-            raw = resp.json()["content"][0]["text"].strip()
-            # Nettoie les éventuels backticks markdown
-            raw = raw.replace("```json", "").replace("```", "").strip()
+            raw = resp.json()["choices"][0]["message"]["content"].strip()
             parsed = json.loads(raw)
             result.update(parsed)
         except Exception:
@@ -284,15 +278,20 @@ with st.sidebar:
     top_n = st.slider("Top N pages", min_value=5, max_value=150, value=10)
 
     st.divider()
-    st.header("🤖 Catégorisation Claude")
-    _has_secret_key = bool(st.secrets.get("anthropic", {}).get("api_key", ""))
+    st.header("🤖 Catégorisation GPT")
+    _has_secret_key = bool(st.secrets.get("openai", {}).get("api_key", ""))
     if _has_secret_key:
-        st.success("✅ Clé Claude configurée (st.secrets)")
-        openai_key = ""
+        st.success("✅ Clé OpenAI configurée")
+        openai_key = st.secrets["openai"]["api_key"]
     else:
-        openai_key = st.text_input("Clé API Anthropic (optionnel)", type="password",
-            help="Ou ajoute [anthropic] api_key dans st.secrets")
-    enable_cat = st.checkbox("Activer la catégorisation", value=True)
+        openai_key = st.text_input("Clé API OpenAI (optionnel)", type="password",
+            help="Ou ajoute [openai] api_key dans st.secrets")
+    if st.button("🤖 Lancer la catégorisation IA", use_container_width=True):
+        st.session_state["run_categorization"] = True
+    if st.button("🗑️ Réinitialiser", use_container_width=True):
+        st.session_state["run_categorization"] = False
+        st.cache_data.clear()
+    enable_cat = st.session_state.get("run_categorization", False)
 
     st.divider()
     st.header("🗂️ Filtres catégories")
