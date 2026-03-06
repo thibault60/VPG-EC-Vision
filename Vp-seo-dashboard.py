@@ -304,7 +304,7 @@ with st.sidebar:
     if not selected_months:
         selected_months = months_available
 
-    top_n = st.number_input("Nombre de pages à analyser", min_value=5, max_value=10000, value=50, step=5)
+    top_n = st.slider("Nombre de pages à analyser", min_value=5, max_value=500, value=50, step=5)
 
     st.divider()
     st.header("🤖 Catégorisation GPT")
