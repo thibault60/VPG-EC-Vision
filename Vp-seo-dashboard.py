@@ -211,33 +211,30 @@ with col_bkg_table:
 # ── Bar columns évolution mensuelle ──
 st.subheader(f"📈 Évolution mensuelle · Top {top_n} URLs · TTV & Bookings")
 
-col_ev1, col_ev2 = st.columns(2)
-
-for ev_col, df_trend_src, metric_label, color_scale in [
-    (col_ev1, df_ttv_agg, "TTV (€)", "Blues"),
-    (col_ev2, df_bkg_agg, "Bookings", "Oranges"),
+for df_trend_src, metric_label in [
+    (df_ttv_agg, "TTV (€)"),
+    (df_bkg_agg, "Bookings"),
 ]:
-    with ev_col:
-        df_t = df_trend_src[df_trend_src["campaign_id"].isin(top_ids)].copy()
-        df_t["url_label"] = df_t["url_label"].fillna("ID:" + df_t["campaign_id"].astype(str))
-        df_t = df_t.sort_values("month")
-        fig_ev = px.bar(
-            df_t,
-            x="month_label",
-            y="value",
-            color="url_label",
-            barmode="group",
-            title=metric_label,
-            labels={"value": metric_label, "month_label": "Mois", "url_label": "URL"},
-            category_orders={"month_label": ordered_month_labels},
-            height=950,
-        )
-        fig_ev.update_layout(
-            legend=dict(orientation="h", yanchor="top", y=-0.18, font=dict(size=9)),
-            margin=dict(b=200),
-            xaxis_tickangle=-30,
-        )
-        st.plotly_chart(fig_ev, use_container_width=True)
+    df_t = df_trend_src[df_trend_src["campaign_id"].isin(top_ids)].copy()
+    df_t["url_label"] = df_t["url_label"].fillna("ID:" + df_t["campaign_id"].astype(str))
+    df_t = df_t.sort_values("month")
+    fig_ev = px.bar(
+        df_t,
+        x="month_label",
+        y="value",
+        color="url_label",
+        barmode="group",
+        title=metric_label,
+        labels={"value": metric_label, "month_label": "Mois", "url_label": "URL"},
+        category_orders={"month_label": ordered_month_labels},
+        height=950,
+    )
+    fig_ev.update_layout(
+        legend=dict(orientation="h", yanchor="top", y=-0.12, font=dict(size=9)),
+        margin=dict(b=180),
+        xaxis_tickangle=-30,
+    )
+    st.plotly_chart(fig_ev, use_container_width=True)
 
 
 # ── Vue par mois ──
