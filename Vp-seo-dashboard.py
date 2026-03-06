@@ -244,6 +244,14 @@ def load_data(tableau_file, carambola_file):
     # Lecture CSV — séparateur ";"
     df_tab = pd.read_csv(tableau_file, sep=";", engine="python")
     df_tab.columns = df_tab.columns.str.strip()
+
+    if "Campaign Id (h1)" not in df_tab.columns:
+        raise ValueError(
+            "MAUVAIS_FICHIER: Ce fichier Tableau est un export agrégé (par Channel), "
+            "pas un export par campagne. Il manque la colonne 'Campaign Id (h1)'. "
+            f"Colonnes trouvées : {list(df_tab.columns)}"
+        )
+
     df_tab = df_tab.rename(columns={
         "Campaign Id (h1)": "campaign_id",
         "Measure Names":    "metric",
@@ -291,6 +299,23 @@ with st.sidebar:
 
 if not tableau_file or not carambola_file:
     st.info("👈 Charge les deux fichiers dans la sidebar pour commencer.")
+    st.stop()
+
+# Vérification rapide du fichier Tableau avant chargement
+import io as _io
+_tab_preview = pd.read_csv(
+    _io.BytesIO(tableau_file.read()) if hasattr(tableau_file, "read") else open(tableau_file, "rb").read().__class__(open(tableau_file, "rb").read()),
+    sep=";", nrows=1, engine="python"
+)
+if hasattr(tableau_file, "seek"):
+    tableau_file.seek(0)
+_tab_preview.columns = _tab_preview.columns.str.strip()
+if "Campaign Id (h1)" not in _tab_preview.columns:
+    st.error(
+        "❌ **Mauvais fichier Tableau.**\n\n"
+        "Ce fichier est un export **agrégé par Channel** — il manque la colonne `Campaign Id (h1)`.\n\n"
+        f"**Colonnes trouvées :** {', '.join(_tab_preview.columns.tolist())}"
+    )
     st.stop()
 
 df = load_data(tableau_file, carambola_file)
