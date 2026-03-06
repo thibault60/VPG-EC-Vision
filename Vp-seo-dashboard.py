@@ -397,26 +397,35 @@ def get_agg(df_in):
 df_ttv_agg  = get_agg(df_filtered[df_filtered["metric"] == "TTV"])
 df_bkg_agg  = get_agg(df_filtered[df_filtered["metric"] == "Bookings"])
 
-# Top N par TTV (référence commune pour les graphiques merged)
-df_ttv_global = (
+# IDs à épingler (toujours présents, même TTV=0)
+_pinned_ids = list(MANUAL_URL_MAPPING.keys())
+
+# Agrégation complète TTV + Bookings
+_ttv_all = (
     df_ttv_agg.groupby(["campaign_id", "campaign_name", "vp_url", "url_label"])["value"]
     .sum().reset_index().rename(columns={"value": "TTV"})
-    .sort_values("TTV", ascending=False).head(top_n)
 )
-df_bkg_global = (
+_bkg_all = (
     df_bkg_agg.groupby(["campaign_id", "campaign_name", "vp_url", "url_label"])["value"]
     .sum().reset_index().rename(columns={"value": "Bookings"})
 )
+_all = _ttv_all.merge(_bkg_all, on=["campaign_id", "campaign_name", "vp_url", "url_label"], how="outer").fillna(0)
 
-# Fusion sur les top IDs TTV
+# Exclure les zéros — mais garder les IDs épinglés
+_active = _all[(_all["TTV"] > 0) | (_all["Bookings"] > 0)]
+_pinned_rows = _all[_all["campaign_id"].isin(_pinned_ids)]
+_all_clean = pd.concat([_active, _pinned_rows]).drop_duplicates(subset=["campaign_id"])
+
+# Épinglés en premier, puis top N par TTV sur le reste
+_pinned_df = _all_clean[_all_clean["campaign_id"].isin(_pinned_ids)]
+_rest_df = _all_clean[~_all_clean["campaign_id"].isin(_pinned_ids)].sort_values("TTV", ascending=False).head(top_n)
+
+df_ttv_global = pd.concat([_pinned_df, _rest_df]).drop_duplicates(subset=["campaign_id"])
+df_bkg_global = _bkg_all  # garde tout pour les merges ultérieurs
+
+# Fusion finale
 top_ids = df_ttv_global["campaign_id"].tolist()
-df_merged_global = df_ttv_global.merge(df_bkg_global, on=["campaign_id", "campaign_name", "vp_url", "url_label"], how="left")
-df_merged_global["Bookings"] = df_merged_global["Bookings"].fillna(0)
-# Exclure les lignes où TTV ET Bookings sont à 0 — sauf les IDs du mapping manuel (ex: Home)
-_pinned_ids = list(MANUAL_URL_MAPPING.keys())
-_active = df_merged_global[(df_merged_global["TTV"] > 0) | (df_merged_global["Bookings"] > 0)]
-_pinned = df_merged_global[df_merged_global["campaign_id"].isin(_pinned_ids)]
-df_merged_global = pd.concat([_active, _pinned]).drop_duplicates(subset=["campaign_id"])
+df_merged_global = df_ttv_global.copy()
 df_merged_global = df_merged_global.sort_values("TTV", ascending=True)  # pour bar horizontal
 
 # ──────────────────────────────────────────
