@@ -292,23 +292,23 @@ df_month_merged = df_month_ttv.merge(df_month_bkg, on=["campaign_id", "vp_url", 
 df_month_merged["Bookings"] = df_month_merged["Bookings"].fillna(0)
 df_month_merged = df_month_merged.sort_values("TTV", ascending=True)
 
-fig_month = make_subplots(specs=[[{"secondary_y": True}]])
-fig_month.add_trace(
-    go.Bar(y=df_month_merged["url_label"], x=df_month_merged["TTV"],
-           name="TTV (€)", orientation="h", marker_color="#1d6fa4", opacity=0.85),
-    secondary_y=False
-)
-fig_month.add_trace(
-    go.Bar(y=df_month_merged["url_label"], x=df_month_merged["Bookings"],
-           name="Bookings", orientation="h", marker_color="#f4a840", opacity=0.85),
-    secondary_y=True
-)
+fig_month = go.Figure()
+fig_month.add_trace(go.Bar(
+    y=df_month_merged["url_label"], x=df_month_merged["TTV"],
+    name="TTV (€)", orientation="h", marker_color="#1d6fa4", opacity=0.85
+))
+fig_month.add_trace(go.Bar(
+    y=df_month_merged["url_label"], x=df_month_merged["Bookings"],
+    name="Bookings", orientation="h", marker_color="#f4a840", opacity=0.85
+))
 fig_month.update_layout(
-    barmode="group", height=max(400, top_n * 45),
+    barmode="group",
+    height=max(400, top_n * 45),
     title=f"Top {top_n} URLs · {MONTH_LABELS[selected_month_detail]}",
     yaxis=dict(tickfont=dict(size=10)),
+    xaxis=dict(title="Valeur"),
     legend=dict(orientation="h", yanchor="bottom", y=1.02),
-    margin=dict(l=20, r=80, t=60, b=20)
+    margin=dict(l=20, r=40, t=60, b=20)
 )
 st.plotly_chart(fig_month, use_container_width=True)
 
