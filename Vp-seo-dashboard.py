@@ -700,30 +700,86 @@ with tab5:
 
         st.divider()
 
-        # ── Scatter — matrice de conversion ──
-        if has_ins:
-            st.subheader("🔵 Matrice de conversion · % conv. Leads vs % conv. Bookings")
-            st.caption("Taille des bulles = TTV · Pages en haut à droite = meilleures des deux dimensions")
-            ds = fa[fa["conv_leads_pct"].notna() & fa["conv_bkg_pct"].notna() & (fa["TTV"] > 0)].copy()
-            if not ds.empty:
+        # ── Scatter — matrice de conversion par schéma de recherche ──
+        if has_ins and "type_page" in fa.columns and fa["type_page"].notna().any():
+            st.subheader("🔵 Matrice de conversion par schéma de recherche · % conv. Leads vs % conv. Bookings")
+            st.caption("Taille des bulles = TTV total du schéma · Quadrant haut-droite = schémas les plus performants sur les deux étapes")
+
+            # Agrégation par schéma
+            ds_schema = fa.groupby("type_page").agg(
+                Clics=("clicks", "sum"),
+                Inscrits=("Inscrits", "sum"),
+                Bookings=("Bookings", "sum"),
+                TTV=("TTV", "sum"),
+                nb_urls=("url_label", "count"),
+            ).reset_index()
+            ds_schema["conv_leads_pct"] = (ds_schema["Inscrits"] / ds_schema["Clics"].replace(0, float("nan")) * 100).round(2)
+            ds_schema["conv_bkg_pct"]   = (ds_schema["Bookings"] / ds_schema["Inscrits"].replace(0, float("nan")) * 100).round(2)
+            ds_schema["aov"]            = (ds_schema["TTV"] / ds_schema["Bookings"].replace(0, float("nan"))).round(0)
+            ds_schema = ds_schema[ds_schema["conv_leads_pct"].notna() & ds_schema["conv_bkg_pct"].notna() & (ds_schema["TTV"] > 0)].copy()
+
+            if not ds_schema.empty:
                 fig_sc = px.scatter(
-                    ds, x="conv_leads_pct", y="conv_bkg_pct", size="TTV",
-                    color="type_page" if "type_page" in ds.columns else None,
-                    hover_name="url_label",
-                    hover_data={"clicks":True,"Inscrits":True,"Bookings":True,
-                                "TTV":":.0f","aov":":.0f","conv_leads_pct":":.2f","conv_bkg_pct":":.2f"},
-                    labels={"conv_leads_pct":"% conv. Leads (Inscrits/Clics)",
-                            "conv_bkg_pct":"% conv. Bookings (Bookings/Inscrits)",
-                            "type_page":"Type"},
-                    size_max=60, height=600
+                    ds_schema,
+                    x="conv_leads_pct",
+                    y="conv_bkg_pct",
+                    size="TTV",
+                    color="type_page",
+                    hover_name="type_page",
+                    text="type_page",
+                    hover_data={
+                        "type_page": False,
+                        "Clics": True,
+                        "Inscrits": True,
+                        "Bookings": True,
+                        "TTV": ":.0f",
+                        "aov": ":.0f",
+                        "nb_urls": True,
+                        "conv_leads_pct": ":.2f",
+                        "conv_bkg_pct": ":.2f",
+                    },
+                    labels={
+                        "conv_leads_pct": "% conv. Leads (Inscrits / Clics GSC)",
+                        "conv_bkg_pct":   "% conv. Bookings (Bookings / Inscrits)",
+                        "type_page":      "Schéma",
+                        "nb_urls":        "Nb URLs",
+                    },
+                    size_max=80,
+                    height=650,
                 )
-                mx = ds["conv_leads_pct"].median()
-                my = ds["conv_bkg_pct"].median()
-                fig_sc.add_vline(x=mx, line_dash="dash", line_color="gray", opacity=0.5,
+                fig_sc.update_traces(textposition="top center", textfont=dict(size=11))
+                mx = ds_schema["conv_leads_pct"].median()
+                my = ds_schema["conv_bkg_pct"].median()
+                fig_sc.add_vline(x=mx, line_dash="dash", line_color="gray", opacity=0.4,
                                  annotation_text=f"Médiane {mx:.2f}%", annotation_position="top right")
-                fig_sc.add_hline(y=my, line_dash="dash", line_color="gray", opacity=0.5,
+                fig_sc.add_hline(y=my, line_dash="dash", line_color="gray", opacity=0.4,
                                  annotation_text=f"Médiane {my:.2f}%", annotation_position="top right")
+                # Annotations quadrants
+                x_max = ds_schema["conv_leads_pct"].max() * 1.05
+                y_max = ds_schema["conv_bkg_pct"].max() * 1.05
+                for txt, ax, ay, color in [
+                    ("🏆 Recruteurs & convertisseurs", x_max, y_max, "green"),
+                    ("📣 Recruteurs uniquement",        x_max, 0,     "orange"),
+                    ("💰 Convertisseurs uniquement",    0,     y_max, "blue"),
+                    ("⚠️ À optimiser",                  0,     0,     "red"),
+                ]:
+                    fig_sc.add_annotation(x=ax, y=ay, text=txt, showarrow=False,
+                                          font=dict(size=10, color=color), opacity=0.6,
+                                          xanchor="right" if ax > 0 else "left",
+                                          yanchor="top"   if ay > 0 else "bottom")
+                fig_sc.update_layout(showlegend=False, margin=dict(t=40, b=20, l=60, r=60))
                 st.plotly_chart(fig_sc, use_container_width=True)
+
+                # Tableau récap schéma sous le scatter
+                st.dataframe(
+                    ds_schema.sort_values("TTV", ascending=False)[
+                        ["type_page","Clics","Inscrits","Bookings","TTV","conv_leads_pct","conv_bkg_pct","aov","nb_urls"]
+                    ].rename(columns={
+                        "type_page":"Schéma","conv_leads_pct":"% conv. Leads",
+                        "conv_bkg_pct":"% conv. Bookings","aov":"AOV (€)","nb_urls":"Nb URLs"
+                    }),
+                    hide_index=True, use_container_width=True
+                )
 
         st.divider()
 
