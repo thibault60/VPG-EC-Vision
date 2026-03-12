@@ -3,12 +3,23 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import plotly.io as pio
 import json
 import requests
 import io
 from openpyxl import Workbook
 from openpyxl.styles import PatternFill, Font, Alignment
 from openpyxl.utils import get_column_letter
+
+# ──────────────────────────────────────────
+# CONFIGURATION PLOTLY & PAGE
+# ──────────────────────────────────────────
+
+# Définition d'un template global pour forcer le fond des graphiques
+pio.templates["vp_dark"] = pio.templates["plotly_dark"]
+pio.templates["vp_dark"].layout.paper_bgcolor = "#212121"
+pio.templates["vp_dark"].layout.plot_bgcolor = "#212121"
+pio.templates.default = "vp_dark"
 
 st.set_page_config(page_title="VP SEO Dashboard", page_icon="🗺️", layout="wide")
 
@@ -321,9 +332,9 @@ st.markdown("Top pages par mois · TTV, Bookings & Funnel de conversion")
 
 with st.sidebar:
     st.header("📂 Fichiers de données")
-    tableau_file   = st.file_uploader("Export Tableau (CSV)",                         type=["csv"])
-    carambola_file = st.file_uploader("Export Carambola (XLSX)",                      type=["xlsx"])
-    gsc_file       = st.file_uploader("Export GSC — clics par page/mois (CSV)",       type=["csv"])
+    tableau_file   = st.file_uploader("Export Tableau (CSV)",                          type=["csv"])
+    carambola_file = st.file_uploader("Export Carambola (XLSX)",                       type=["xlsx"])
+    gsc_file       = st.file_uploader("Export GSC — clics par page/mois (CSV)",        type=["csv"])
     st.divider()
     st.caption("Les fichiers ne sont pas stockés — traitement 100 % local.")
 
@@ -475,7 +486,7 @@ with tab1:
         ))
         fig_d.update_layout(title=f"TTV · Top {top_n} URLs", height=600, showlegend=False,
                             margin=dict(l=10, r=10, t=50, b=10))
-        st.plotly_chart(fig_d, use_container_width=True)
+        st.plotly_chart(fig_d, use_container_width=True, theme=None)
 
     with col_t:
         st.markdown(f"**Bookings · Top {top_n} URLs**")
@@ -527,7 +538,7 @@ with tab1:
                          margin=dict(t=40, b=180, l=60, r=60))
     fig_ev.update_yaxes(title_text="TTV (€)", secondary_y=False)
     fig_ev.update_yaxes(title_text="Bookings", secondary_y=True, showgrid=False)
-    st.plotly_chart(fig_ev, use_container_width=True)
+    st.plotly_chart(fig_ev, use_container_width=True, theme=None)
 
     st.subheader("🗓️ Heatmap mensuelle")
     hc1, hc2 = st.columns(2)
@@ -547,7 +558,7 @@ with tab1:
             fig_hm.update_layout(height=max(400,top_n*30), coloraxis_showscale=False,
                                  xaxis=dict(side="top"), margin=dict(l=10,r=10,t=50,b=10))
             fig_hm.update_traces(textfont_size=9)
-            st.plotly_chart(fig_hm, use_container_width=True)
+            st.plotly_chart(fig_hm, use_container_width=True, theme=None)
 
 # ─── TAB 2 : VUE PAR MOIS ───────────────
 
@@ -571,7 +582,7 @@ with tab2:
                         yaxis=dict(tickfont=dict(size=10)), xaxis=dict(title="Valeur"),
                         legend=dict(orientation="h", yanchor="bottom", y=1.02),
                         margin=dict(l=20,r=40,t=60,b=20))
-    st.plotly_chart(fig_m, use_container_width=True)
+    st.plotly_chart(fig_m, use_container_width=True, theme=None)
     st.dataframe(dm_mg[["campaign_id","campaign_name","vp_url","TTV","Bookings"]]
                  .rename(columns={"campaign_id":"ID","campaign_name":"Campagne","vp_url":"URL VP"}),
                  hide_index=True, use_container_width=True)
@@ -598,7 +609,7 @@ with tab3:
                              color=val_col, color_continuous_scale=scale,
                              height=max(400,len(df_d)*28), labels={val_col: title.split(" par")[0]})
                 fig.update_layout(yaxis=dict(autorange="reversed"), coloraxis_showscale=False)
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, use_container_width=True, theme=None)
 
         st.subheader("📈 Évolution mensuelle par destination")
         ev_dm = st.radio("Métrique", ["TTV (€)","Bookings"], horizontal=True, key="evdm")
@@ -608,7 +619,7 @@ with tab3:
                          category_orders={"month_label": ordered_month_labels}, height=500,
                          labels={"value":ev_dm,"month_label":"Mois","destination":"Destination"})
         fig_evd.update_layout(legend=dict(orientation="h",yanchor="top",y=-0.2,font=dict(size=9)), margin=dict(b=180))
-        st.plotly_chart(fig_evd, use_container_width=True)
+        st.plotly_chart(fig_evd, use_container_width=True, theme=None)
 
 # ─── TAB 4 : PAR TYPE DE PAGE ───────────
 
@@ -634,7 +645,7 @@ with tab4:
                              color=val_col, color_continuous_scale=scale,
                              height=max(400,len(df_t)*40), labels={val_col:title.split(" par")[0],"type_page":"Type"})
                 fig.update_layout(yaxis=dict(autorange="reversed"), coloraxis_showscale=False)
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, use_container_width=True, theme=None)
 
         st.subheader("📈 Évolution mensuelle par type de page")
         ev_tm = st.radio("Métrique", ["TTV (€)","Bookings"], horizontal=True, key="evtm")
@@ -644,7 +655,7 @@ with tab4:
                          category_orders={"month_label": ordered_month_labels}, height=500,
                          labels={"value":ev_tm,"month_label":"Mois","type_page":"Type"})
         fig_evt.update_layout(legend=dict(orientation="h",yanchor="top",y=-0.2,font=dict(size=9)), margin=dict(b=180))
-        st.plotly_chart(fig_evt, use_container_width=True)
+        st.plotly_chart(fig_evt, use_container_width=True, theme=None)
 
 # ─── TAB 5 : FUNNEL & CONVERSION ────────
 
@@ -772,14 +783,14 @@ with tab5:
                     ("🏆 Recruteurs & convertisseurs", x_max, y_max, "green"),
                     ("📣 Recruteurs uniquement",        x_max, 0,     "orange"),
                     ("💰 Convertisseurs uniquement",    0,     y_max, "blue"),
-                    ("⚠️ À optimiser",                  0,     0,     "red"),
+                    ("⚠️ À optimiser",                 0,     0,     "red"),
                 ]:
                     fig_sc.add_annotation(x=ax, y=ay, text=txt, showarrow=False,
                                           font=dict(size=10, color=color), opacity=0.6,
                                           xanchor="right" if ax > 0 else "left",
                                           yanchor="top"   if ay > 0 else "bottom")
                 fig_sc.update_layout(showlegend=False, margin=dict(t=40, b=20, l=60, r=60))
-                st.plotly_chart(fig_sc, use_container_width=True)
+                st.plotly_chart(fig_sc, use_container_width=True, theme=None)
 
                 # Tableau récap schéma sous le scatter
                 st.dataframe(
@@ -810,7 +821,7 @@ with tab5:
                          labels={col_m: fm, "url_label": "Page"})
         fig_bar.update_layout(coloraxis_showscale=False, yaxis=dict(tickfont=dict(size=10)),
                               margin=dict(l=10,r=40,t=50,b=20))
-        st.plotly_chart(fig_bar, use_container_width=True)
+        st.plotly_chart(fig_bar, use_container_width=True, theme=None)
 
         st.divider()
 
@@ -839,7 +850,7 @@ with tab5:
                                     title=title, color=val_c, color_continuous_scale=scale,
                                     height=max(350,len(tf)*40), labels={val_c:title.split(" par")[0],"type_page":"Type"})
                     fig_tf.update_layout(coloraxis_showscale=False)
-                    st.plotly_chart(fig_tf, use_container_width=True)
+                    st.plotly_chart(fig_tf, use_container_width=True, theme=None)
 
             st.dataframe(
                 tf[["type_page","Clics","Inscrits","Bookings","TTV","conv_leads_pct","conv_bkg_pct","aov"]]
